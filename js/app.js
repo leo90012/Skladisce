@@ -1,0 +1,669 @@
+/* Rabimbox – Skladišče: prijava osebja, pregled boxov, filtri, razvrščanje, zgodovina (admin). */
+(function(){
+  "use strict";
+  var CFG = window.RABIMBOX_CONFIG || {};
+  var APP = document.getElementById("app");
+  var sb = (window.supabase && window.supabase.createClient)
+    ? window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { auth:{ persistSession:true } })
+    : null;
+
+  // uporabniško ime -> e-naslov
+  var USERMAP = {
+    "skladiscnik":"skladiscnik@rabimbox.si",
+    "skladiščnik":"skladiscnik@rabimbox.si",
+    "admin":"admin@rabimbox.si"
+  };
+  var ADMIN_EMAIL = "admin@rabimbox.si";
+
+  var STATUSI = {
+    na_zalogi:"Na zalogi", rezervirana:"Rezervirana", v_transportu:"V transportu",
+    pri_stranki:"Pri stranki", v_skladiscu:"V skladišču",
+    poskodovana:"Poškodovana", umaknjena:"Umaknjena"
+  };
+
+  // Statusi naročil/zahtev – enotni za oba vira (glej sql/integracija.sql)
+  var Z_STATUSI = {
+    nova:"Nova", potrjena:"Potrjena", v_izvajanju:"V izvajanju",
+    zakljucena:"Zaključena", preklicana:"Preklicana"
+  };
+  // narocila uporabljajo srednji spol (novo/potrjeno/...) – preslikava v skupni ključ
+  function zKey(s){
+    var v = String(s||"").toLowerCase();
+    if(v.indexOf("nov")===0) return "nova";
+    if(v.indexOf("potrj")===0) return "potrjena";
+    if(v.indexOf("v_izvaj")===0) return "v_izvajanju";
+    if(v.indexOf("zaklju")===0) return "zakljucena";
+    if(v.indexOf("preklic")===0) return "preklicana";
+    return v||"nova";
+  }
+  // vrednost, ki jo zapišemo nazaj v bazo (narocila = srednji spol, zahteve = ženski)
+  function zDbValue(key, vir){
+    if(vir!=="narocilo") return key;
+    return {nova:"novo",potrjena:"potrjeno",v_izvajanju:"v_izvajanju",zakljucena:"zakljuceno",preklicana:"preklicano"}[key]||key;
+  }
+  var Z_ZAPRTI = {zakljucena:1, preklicana:1};
+
+  var state = {
+    email:null, isAdmin:false, tab:"zahteve",
+    boxes:[], dogodki:[], zahteve:[], loaded:false, dogLoaded:false, zahLoaded:false,
+    q:"", fStatus:"", fNar:"", sortKey:"id", sortDir:1,
+    dq:"", dSortKey:"cas", dSortDir:-1,
+    zq:"", zStatus:"", zVir:"", zOpenOnly:true, zSortKey:"datum_dostave", zSortDir:1
+  };
+
+  function esc(x){return String(x==null?"":x).replace(/[&<>"']/g,function(m){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m];});}
+  function el(id){return document.getElementById(id);}
+  function fmtD(d){ if(!d) return ""; var s=String(d).slice(0,10); var p=s.split("-"); return p.length===3?(p[2]+"."+p[1]+"."+p[0]):s; }
+  function fmtDT(d){ if(!d) return ""; var dt=new Date(d); if(isNaN(dt)) return String(d).slice(0,16); return ("0"+dt.getDate()).slice(-2)+"."+("0"+(dt.getMonth()+1)).slice(-2)+"."+dt.getFullYear()+" "+("0"+dt.getHours()).slice(-2)+":"+("0"+dt.getMinutes()).slice(-2); }
+  function statusChip(s){ var k=s||"na_zalogi"; return '<span class="chip '+esc(k)+'">'+esc(STATUSI[k]||k)+'</span>'; }
+  function zChip(s){ var k=zKey(s); return '<span class="chip z-'+esc(k)+'">'+esc(Z_STATUSI[k]||k)+'</span>'; }
+  function virChip(v){ return v==="narocilo"
+    ? '<span class="chip vir-narocilo">Spletno naročilo</span>'
+    : '<span class="chip vir-zahteva">Zahteva iz panela</span>'; }
+  function dash(v){ return (v==null||v==="")?'<span class="dash">–</span>':esc(v); }
+  function LOGO(){ return "Slike/5.png"; }
+
+  /* ---------------- LOGIN ---------------- */
+  function viewLogin(msg){
+    APP.innerHTML =
+      '<div class="login-wrap"><div class="login-card">'+
+      '<img class="logo" src="'+LOGO()+'" alt="Rabimbox" />'+
+      '<h1>Skladišče</h1><p class="sub">Prijava za osebje</p>'+
+      (msg?'<div class="alert err">'+esc(msg)+'</div>':'')+
+      '<form id="lform">'+
+      '<div class="field"><label>Uporabniško ime</label><input id="user" autocomplete="username" placeholder="skladiščnik ali Admin" /></div>'+
+      '<div class="field"><label>Geslo</label><input id="pass" type="password" autocomplete="current-password" placeholder="********" /></div>'+
+      '<button class="btn block" id="lbtn" type="submit">Prijava</button>'+
+      '</form>'+
+      '<p class="login-hint">Dostop imata računa <b>skladiščnik</b> in <b>Admin</b>.</p>'+
+      '</div></div>';
+    el("lform").addEventListener("submit", onLogin);
+  }
+  async function onLogin(e){
+    e.preventDefault();
+    var u = (el("user").value||"").trim().toLowerCase();
+    var pass = el("pass").value||"";
+    var email = USERMAP[u] || (u.indexOf("@")>0 ? u : null);
+    var btn = el("lbtn");
+    if(!email){ viewLogin("Neznano uporabniško ime. Uporabi 'skladiščnik' ali 'Admin'."); return; }
+    if(!pass){ viewLogin("Vpiši geslo."); return; }
+    btn.disabled=true; btn.textContent="Prijavljam...";
+    try{
+      var r = await sb.auth.signInWithPassword({ email:email, password:pass });
+      if(r.error){ viewLogin("Napačno uporabniško ime ali geslo."); return; }
+      await afterLogin();
+    }catch(err){ viewLogin("Napaka pri prijavi. Poskusi znova."); }
+  }
+
+  async function afterLogin(){
+    var s = await sb.auth.getSession();
+    var user = s && s.data && s.data.session ? s.data.session.user : null;
+    if(!user){ viewLogin(); return; }
+    state.email = user.email;
+    state.isAdmin = (String(user.email).toLowerCase() === ADMIN_EMAIL);
+    state.tab = "zahteve"; state.loaded=false; state.dogLoaded=false; state.zahLoaded=false;
+    renderMain();
+    loadZahteve();
+    loadBoxi();
+  }
+
+  async function doLogout(){
+    try{ await sb.auth.signOut(); }catch(e){}
+    state.email=null; state.isAdmin=false; state.boxes=[]; state.dogodki=[]; state.zahteve=[];
+    viewLogin();
+  }
+
+  /* ---------------- MAIN ---------------- */
+  function odprtihZahtev(){
+    return state.zahteve.filter(function(z){ return !Z_ZAPRTI[zKey(z.status)]; }).length;
+  }
+  function renderMain(){
+    var odp = odprtihZahtev();
+    var badge = (state.zahLoaded && odp) ? '<span class="tabbadge">'+odp+'</span>' : '';
+    var tabs = '<div class="tabs">'+
+      '<button data-tab="zahteve" class="'+(state.tab==="zahteve"?"active":"")+'">Naročila'+badge+'</button>'+
+      '<button data-tab="boxi" class="'+(state.tab==="boxi"?"active":"")+'">Škatle</button>'+
+      (state.isAdmin?'<button data-tab="zgodovina" class="'+(state.tab==="zgodovina"?"active":"")+'">Zgodovina</button>':'')+'</div>';
+    APP.innerHTML =
+      '<div class="top"><div class="brand"><img src="'+LOGO()+'" alt="Rabimbox" /><span class="tt">Skladišče</span></div>'+
+      '<div class="who"><button class="btn ghost small" id="scan">Skeniraj kodo</button>'+
+      '<span class="pill '+(state.isAdmin?"admin":"skl")+'">'+(state.isAdmin?"Administrator":"Skladiščnik")+'</span>'+
+      '<span>'+esc(state.email)+'</span><button class="btn ghost small" id="logout">Odjava</button></div></div>'+
+      '<div class="wrap">'+tabs+'<div id="content"></div></div>';
+    el("logout").addEventListener("click", doLogout);
+    var scanBtn=el("scan"); if(scanBtn) scanBtn.addEventListener("click", openScanner);
+    Array.prototype.forEach.call(document.querySelectorAll(".tabs button"), function(b){
+      b.addEventListener("click", function(){
+        state.tab=b.getAttribute("data-tab"); renderMain();
+        if(state.tab==="zgodovina") loadDogodki();
+        else if(state.tab==="zahteve"){ if(!state.zahLoaded) loadZahteve(); }
+      });
+    });
+    if(state.tab==="boxi") renderBoxiTab();
+    else if(state.tab==="zahteve") renderZahteveTab();
+    else renderZgodovinaTab();
+  }
+
+  /* ------- Naročila in zahteve strank ------- */
+  function renderZahteveTab(){
+    var c = el("content"); if(!c) return;
+    if(!state.zahLoaded){ c.innerHTML = '<div class="boot"><div class="spinner"></div></div>'; return; }
+    var stOpts = Object.keys(Z_STATUSI).map(function(k){ return '<option value="'+k+'">'+esc(Z_STATUSI[k])+'</option>'; }).join("");
+    c.innerHTML =
+      '<div class="stats" id="zstats"></div>'+
+      '<div class="toolbar">'+
+      '<input class="search" id="zq" placeholder="Iskanje: stranka, naslov, št. stranke, telefon..." value="'+esc(state.zq)+'" />'+
+      '<select id="zStatus"><option value="">Vsi statusi</option>'+stOpts+'</select>'+
+      '<select id="zVir"><option value="">Vsi viri</option><option value="narocilo">Spletna naročila</option><option value="zahteva">Zahteve iz panela</option></select>'+
+      '<label class="chk"><input type="checkbox" id="zOpen" '+(state.zOpenOnly?"checked":"")+' /> Samo odprta</label>'+
+      '<span class="count" id="zcount"></span>'+
+      '</div>'+
+      '<div class="tablecard" id="ztablecard"></div>';
+    el("zq").addEventListener("input", function(e){ state.zq=e.target.value; refreshZahteve(); });
+    el("zStatus").value=state.zStatus; el("zStatus").addEventListener("change", function(e){ state.zStatus=e.target.value; refreshZahteve(); });
+    el("zVir").value=state.zVir; el("zVir").addEventListener("change", function(e){ state.zVir=e.target.value; refreshZahteve(); });
+    el("zOpen").addEventListener("change", function(e){ state.zOpenOnly=e.target.checked; refreshZahteve(); });
+    refreshZahteve();
+  }
+
+  function zahteveColumns(){
+    var cols = [
+      {k:"datum_dostave", t:"Dostava", r:function(x){
+        var d = x.datum_dostave ? fmtD(x.datum_dostave) : '<span class="dash">–</span>';
+        var danes = x.datum_dostave && String(x.datum_dostave).slice(0,10)===todayISO();
+        return '<span class="'+(danes?"danes":"")+'">'+d+(x.cas_dostave?' <span class="mono">'+esc(String(x.cas_dostave).slice(0,5))+'</span>':'')+'</span>';
+      }},
+      {k:"vir", t:"Vir", r:function(x){ return virChip(x.vir); }},
+      {k:"vrsta", t:"Storitev", r:function(x){ return dash(x.vrsta); }},
+      {k:"st_boxov", t:"Boxi", r:function(x){ return x.st_boxov?('<b>'+x.st_boxov+'</b>'):'<span class="dash">–</span>'; }},
+      {k:"kupec", t:"Stranka", r:function(x){ return dash(x.kupec); }},
+      {k:"stevilka_stranke", t:"Št. stranke", r:function(x){ return '<span class="mono">'+dash(x.stevilka_stranke)+'</span>'; }}
+    ];
+    if(state.isAdmin){
+      cols.push({k:"kupec_email", t:"E-pošta", r:function(x){ return dash(x.kupec_email); }});
+      cols.push({k:"telefon", t:"Telefon", r:function(x){ return dash(x.telefon); }});
+    }
+    cols.push({k:"mesto", t:"Kraj", r:function(x){ return dash(x.mesto); }});
+    cols.push({k:"status", t:"Status", r:function(x){ return zChip(x.status); }});
+    cols.push({k:"placano", t:"Plačano", r:function(x){
+      if(x.vir!=="narocilo") return '<span class="dash">–</span>';
+      return x.placano ? '<span class="chip z-zakljucena">Da</span>' : '<span class="chip z-preklicana">Ne</span>';
+    }});
+    return cols;
+  }
+
+  function todayISO(){ var d=new Date(); return d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2)+"-"+("0"+d.getDate()).slice(-2); }
+
+  function filteredZahteve(){
+    var q = state.zq.trim().toLowerCase();
+    return state.zahteve.filter(function(x){
+      if(state.zOpenOnly && Z_ZAPRTI[zKey(x.status)]) return false;
+      if(state.zStatus && zKey(x.status)!==state.zStatus) return false;
+      if(state.zVir && x.vir!==state.zVir) return false;
+      if(q){
+        var hay=[x.kupec,x.kupec_email,x.telefon,x.stevilka_stranke,x.naslov,x.mesto,x.postna_stevilka,x.vrsta,x.stevilka,x.opomba].join(" ").toLowerCase();
+        if(hay.indexOf(q)<0) return false;
+      }
+      return true;
+    });
+  }
+
+  function refreshZahteve(){
+    var rows = sortRows(filteredZahteve(), state.zSortKey, state.zSortDir);
+    var cols = zahteveColumns();
+    var head = '<tr>'+cols.map(function(c){
+      var ar = state.zSortKey===c.k ? '<span class="ar">'+(state.zSortDir>0?"▲":"▼")+'</span>' : '';
+      return '<th data-k="'+c.k+'">'+esc(c.t)+ar+'</th>';
+    }).join("")+'</tr>';
+    var body = rows.length
+      ? rows.map(function(x){ return '<tr class="rowlink" data-key="'+esc(x.vir+":"+x.id)+'">'+cols.map(function(c){ return '<td>'+c.r(x)+'</td>'; }).join("")+'</tr>'; }).join("")
+      : '<tr><td colspan="'+cols.length+'"><div class="empty"><img src="Slike/Skatle.png" alt="" /><div>Ni naročil za prikaz.</div></div></td></tr>';
+    el("ztablecard").innerHTML = '<div class="tablescroll"><table><thead>'+head+'</thead><tbody>'+body+'</tbody></table></div>';
+    var cnt = el("zcount"); if(cnt) cnt.textContent = rows.length+" / "+state.zahteve.length+" naročil";
+    Array.prototype.forEach.call(document.querySelectorAll("#ztablecard th"), function(th){
+      th.addEventListener("click", function(){ var k=th.getAttribute("data-k"); if(state.zSortKey===k) state.zSortDir*=-1; else{ state.zSortKey=k; state.zSortDir=1; } refreshZahteve(); });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll("#ztablecard tbody tr[data-key]"), function(tr){
+      tr.addEventListener("click", function(){
+        var key=tr.getAttribute("data-key");
+        var z=state.zahteve.filter(function(x){ return (x.vir+":"+x.id)===key; })[0];
+        if(z) openZahteva(z);
+      });
+    });
+    renderZStats();
+  }
+
+  function renderZStats(){
+    var box = el("zstats"); if(!box) return;
+    var danes = todayISO();
+    var c = {danes:0, nova:0, potrjena:0, v_izvajanju:0};
+    state.zahteve.forEach(function(z){
+      var k=zKey(z.status);
+      if(c[k]!==undefined) c[k]++;
+      if(!Z_ZAPRTI[k] && z.datum_dostave && String(z.datum_dostave).slice(0,10)===danes) c.danes++;
+    });
+    box.innerHTML =
+      '<div class="stat"><div class="n"><span class="dot" style="background:var(--brand)"></span>'+c.danes+'</div><div class="l">Za danes</div></div>'+
+      '<div class="stat"><div class="n"><span class="dot" style="background:var(--amber)"></span>'+c.nova+'</div><div class="l">Nova</div></div>'+
+      '<div class="stat"><div class="n"><span class="dot" style="background:var(--accent)"></span>'+c.potrjena+'</div><div class="l">Potrjena</div></div>'+
+      '<div class="stat"><div class="n"><span class="dot" style="background:var(--violet)"></span>'+c.v_izvajanju+'</div><div class="l">V izvajanju</div></div>';
+  }
+
+  async function loadZahteve(){
+    if(!sb) return;
+    try{
+      state.zahteve = await rpcAll("sklad_zahteve");
+      state.zahLoaded = true;
+      renderMain();
+    }catch(err){
+      state.zahLoaded = true;
+      var c = el("content");
+      if(c && state.tab==="zahteve") c.innerHTML = '<div class="alert err">Napaka pri nalaganju naročil: '+esc(err.message||err)+
+        '<br><span style="font-size:12.5px">Če piše, da funkcija ne obstaja, poženi <b>sql/integracija.sql</b> v Supabase.</span></div>';
+    }
+  }
+
+  function openZahteva(z){
+    var kljuc = z.vir+":"+z.id;
+    var naslovVrstica = [z.naslov, [z.postna_stevilka, z.mesto].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+    var dodatki = [];
+    if(z.stopnice) dodatki.push("stopnice (nad 2 nadstropji)");
+    if(z.pomoc_polnjenje) dodatki.push("pomoč pri polnjenju");
+    var inner =
+      '<div class="modal-h"><span>'+(z.vir==="narocilo"?"Naročilo":"Zahteva")+' '+esc(z.stevilka||("#"+z.id))+'</span><button class="x" id="mx">&times;</button></div>'+
+      '<div class="mbody"><div class="dlist">'+
+        drow("Vir", virChip(z.vir))+
+        drow("Storitev", dash(z.vrsta))+
+        drow("Št. boxov", z.st_boxov?String(z.st_boxov):'<span class="dash">–</span>')+
+        drow("Stranka", dash(z.kupec)+(z.stevilka_stranke?' <span class="mono">('+esc(z.stevilka_stranke)+')</span>':''))+
+        (state.isAdmin?drow("E-pošta", z.kupec_email?'<a href="mailto:'+esc(z.kupec_email)+'">'+esc(z.kupec_email)+'</a>':'<span class="dash">–</span>'):'')+
+        (state.isAdmin?drow("Telefon", z.telefon?'<a href="tel:'+esc(String(z.telefon).replace(/\s/g,""))+'">'+esc(z.telefon)+'</a>':'<span class="dash">–</span>'):'')+
+        drow("Naslov", naslovVrstica?esc(naslovVrstica):'<span class="dash">–</span>')+
+        drow("Termin", (z.datum_dostave?fmtD(z.datum_dostave):"–")+(z.cas_dostave?' ob '+esc(String(z.cas_dostave).slice(0,5)):""))+
+        (dodatki.length?drow("Dodatki", esc(dodatki.join(", "))):'')+
+        (z.vir==="narocilo"?drow("Plačano", z.placano?'<span class="chip z-zakljucena">Da</span>':'<span class="chip z-preklicana">Ne</span>'):'')+
+        drow("Opomba", dash(z.opomba))+
+        drow("Status", zChip(z.status))+
+      '</div>'+
+      '<div id="zskatle" class="roinfo">Nalagam škatle...</div>'+
+      '<div class="fld" style="margin-top:12px"><label>Nov termin (neobvezno)</label><input type="date" id="z_datum" value="'+esc(String(z.datum_dostave||"").slice(0,10))+'" /></div>'+
+      '<div id="z_err"></div></div>'+
+      '<div class="mfoot">'+
+        '<div class="zactions">'+
+          zBtn(z,"potrjena","Potrdi")+
+          zBtn(z,"v_izvajanju","V izvajanje")+
+          zBtn(z,"zakljucena","Zaključi")+
+          zBtn(z,"preklicana","Prekliči naročilo")+
+        '</div>'+
+        '<span style="flex:1"></span><button class="btn ghost" id="z_close">Zapri</button>'+
+      '</div>';
+    showModal(inner);
+    el("mx").onclick=closeModal;
+    el("z_close").onclick=closeModal;
+    Array.prototype.forEach.call(document.querySelectorAll(".zactions button[data-st]"), function(b){
+      b.onclick=function(){ setZStatus(z, b.getAttribute("data-st")); };
+    });
+    loadZahtevaSkatle(z);
+    void kljuc;
+  }
+  function zBtn(z, st, label){
+    var cur = zKey(z.status);
+    if(cur===st) return '';
+    var cls = (st==="preklicana") ? "btn ghost danger" : (st==="zakljucena" ? "btn" : "btn ghost");
+    return '<button class="'+cls+'" data-st="'+st+'">'+esc(label)+'</button>';
+  }
+
+  async function loadZahtevaSkatle(z){
+    var box = el("zskatle"); if(!box) return;
+    if(z.vir!=="zahteva"){ box.innerHTML = 'Škatle se dodelijo ob potrditvi naročila.'; return; }
+    try{
+      var r = await sb.rpc("sklad_zahteva_skatle", { p_zahteva_id: z.id });
+      if(r.error) throw r.error;
+      var arr = r.data||[];
+      box.innerHTML = arr.length
+        ? 'Izbrane škatle ('+arr.length+'): '+arr.map(function(s){ return '<span class="mono">'+esc(s.barkoda||("#"+s.id))+'</span>'; }).join(", ")
+        : 'Stranka ni izbrala posameznih škatel.';
+    }catch(e){ box.innerHTML = 'Škatel ni bilo mogoče naložiti.'; }
+  }
+
+  async function setZStatus(z, novKey){
+    var errBox = el("z_err");
+    var btns = document.querySelectorAll(".zactions button");
+    Array.prototype.forEach.call(btns, function(b){ b.disabled=true; });
+    var datum = el("z_datum") ? (el("z_datum").value||null) : null;
+    try{
+      var r = await sb.rpc("sklad_update_zahteva", {
+        p_id: z.id, p_vir: z.vir,
+        p_status: zDbValue(novKey, z.vir),
+        p_opomba: null,
+        p_datum_dostave: datum
+      });
+      if(r.error) throw r.error;
+      closeModal();
+      state.zahLoaded=false; renderZahteveTab();
+      await loadZahteve();
+    }catch(err){
+      if(errBox) errBox.innerHTML='<div class="alert err">Napaka: '+esc(err.message||err)+'</div>';
+      Array.prototype.forEach.call(btns, function(b){ b.disabled=false; });
+    }
+  }
+
+  /* ------- Škatle ------- */
+  function renderBoxiTab(){
+    var c = el("content"); if(!c) return;
+    if(!state.loaded){ c.innerHTML = '<div class="boot"><div class="spinner"></div></div>'; return; }
+    var statusOpts = Object.keys(STATUSI).map(function(k){ return '<option value="'+k+'">'+esc(STATUSI[k])+'</option>'; }).join("");
+    c.innerHTML =
+      '<div class="stats" id="stats"></div>'+
+      '<div class="toolbar">'+
+      '<input class="search" id="q" placeholder="Iskanje: bar koda, stranka, št. naročila..." value="'+esc(state.q)+'" />'+
+      '<select id="fStatus"><option value="">Vsi statusi</option>'+statusOpts+'</select>'+
+      '<select id="fNar"><option value="">Vse naročnine</option><option value="aktivna">Aktivna</option><option value="zakljucena">Zaključena</option><option value="preklicana">Preklicana</option><option value="brez">Brez naročnine</option></select>'+
+      '<span class="count" id="count"></span>'+
+      '</div>'+
+      '<div class="tablecard" id="tablecard"></div>';
+    el("q").addEventListener("input", function(e){ state.q=e.target.value; refreshBoxi(); });
+    el("fStatus").value=state.fStatus; el("fStatus").addEventListener("change", function(e){ state.fStatus=e.target.value; refreshBoxi(); });
+    el("fNar").value=state.fNar; el("fNar").addEventListener("change", function(e){ state.fNar=e.target.value; refreshBoxi(); });
+    refreshBoxi();
+  }
+
+  function boxColumns(){
+    var cols = [
+      {k:"barkoda", t:"Bar koda", r:function(x){return '<span class="mono">'+dash(x.barkoda)+'</span>';}},
+      {k:"status", t:"Status", r:function(x){return statusChip(x.status);}},
+      {k:"stevilka_stranke", t:"Št. stranke", r:function(x){return '<span class="mono">'+dash(x.stevilka_stranke)+'</span>';}},
+      {k:"kupec", t:"Stranka", r:function(x){return dash(x.kupec);}}
+    ];
+    if(state.isAdmin){
+      cols.push({k:"kupec_email", t:"E-pošta", r:function(x){return dash(x.kupec_email);}});
+      cols.push({k:"telefon", t:"Telefon", r:function(x){return dash(x.telefon);}});
+    }
+    cols.push({k:"narocilo_stevilka", t:"Naročilo", r:function(x){return '<span class="mono">'+dash(x.narocilo_stevilka||x.narocilo_id)+'</span>';}});
+    cols.push({k:"narocnina_status", t:"Naročnina", r:function(x){return dash(x.narocnina_status);}});
+    cols.push({k:"datum_od", t:"Velja od", r:function(x){return x.datum_od?fmtD(x.datum_od):'<span class="dash">–</span>';}});
+    cols.push({k:"datum_do", t:"Velja do", r:function(x){return x.datum_do?fmtD(x.datum_do):'<span class="dash">–</span>';}});
+    cols.push({k:"lokacija", t:"Lokacija", r:function(x){return dash(x.lokacija);}});
+    cols.push({k:"posodobljeno", t:"Posodobljeno", r:function(x){return x.posodobljeno?fmtDT(x.posodobljeno):'<span class="dash">–</span>';}});
+    return cols;
+  }
+
+  function filteredBoxi(){
+    var q = state.q.trim().toLowerCase();
+    return state.boxes.filter(function(x){
+      if(state.fStatus && x.status!==state.fStatus) return false;
+      if(state.fNar){
+        if(state.fNar==="brez"){ if(x.narocnina_id) return false; }
+        else if((x.narocnina_status||"")!==state.fNar) return false;
+      }
+      if(q){
+        var hay = [x.barkoda,x.kupec,x.stevilka_stranke,x.narocilo_stevilka,x.kupec_email,x.status].join(" ").toLowerCase();
+        if(hay.indexOf(q)<0) return false;
+      }
+      return true;
+    });
+  }
+
+  function sortRows(rows, key, dir){
+    var copy = rows.slice();
+    copy.sort(function(a,b){
+      var av=a[key], bv=b[key];
+      if(av==null) av=""; if(bv==null) bv="";
+      if(typeof av==="number" && typeof bv==="number") return (av-bv)*dir;
+      av=String(av).toLowerCase(); bv=String(bv).toLowerCase();
+      if(av<bv) return -1*dir; if(av>bv) return 1*dir; return 0;
+    });
+    return copy;
+  }
+
+  function refreshBoxi(){
+    var rows = sortRows(filteredBoxi(), state.sortKey, state.sortDir);
+    var cols = boxColumns();
+    var head = '<tr>'+cols.map(function(c){
+      var ar = state.sortKey===c.k ? '<span class="ar">'+(state.sortDir>0?"▲":"▼")+'</span>' : '';
+      return '<th data-k="'+c.k+'">'+esc(c.t)+ar+'</th>';
+    }).join("")+'</tr>';
+    var body;
+    if(!rows.length){
+      body = '<tr><td colspan="'+cols.length+'"><div class="empty"><img src="Slike/Skatle.png" alt="" /><div>Ni zadetkov.</div></div></td></tr>';
+    }else{
+      body = rows.map(function(x){ return '<tr class="rowlink" data-id="'+x.id+'">'+cols.map(function(c){ return '<td>'+c.r(x)+'</td>'; }).join("")+'</tr>'; }).join("");
+    }
+    el("tablecard").innerHTML = '<div class="tablescroll"><table><thead>'+head+'</thead><tbody>'+body+'</tbody></table></div>';
+    var cnt = el("count"); if(cnt) cnt.textContent = rows.length+" / "+state.boxes.length+" škatel";
+    Array.prototype.forEach.call(document.querySelectorAll("#tablecard th"), function(th){
+      th.addEventListener("click", function(){ var k=th.getAttribute("data-k"); if(state.sortKey===k) state.sortDir*=-1; else{ state.sortKey=k; state.sortDir=1; } refreshBoxi(); });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll("#tablecard tbody tr[data-id]"), function(tr){
+      tr.addEventListener("click", function(){ var id=tr.getAttribute("data-id"); var b=state.boxes.filter(function(x){return String(x.id)===id;})[0]; if(b) openDetail(b); });
+    });
+    renderStats();
+  }
+
+  function renderStats(){
+    var box = el("stats"); if(!box) return;
+    var counts = {}; Object.keys(STATUSI).forEach(function(k){counts[k]=0;});
+    state.boxes.forEach(function(x){ var k=x.status||"na_zalogi"; counts[k]=(counts[k]||0)+1; });
+    var order = ["na_zalogi","rezervirana","v_transportu","pri_stranki","v_skladiscu"];
+    var dotc = {na_zalogi:"#8a94a3",rezervirana:"var(--brand)",v_transportu:"var(--violet)",pri_stranki:"var(--amber)",v_skladiscu:"var(--green)"};
+    var html = '<div class="stat"><div class="n">'+state.boxes.length+'</div><div class="l">Vse škatle</div></div>';
+    order.forEach(function(k){ if(counts[k]!==undefined) html+='<div class="stat"><div class="n"><span class="dot" style="background:'+dotc[k]+'"></span>'+counts[k]+'</div><div class="l">'+STATUSI[k]+'</div></div>'; });
+    box.innerHTML = html;
+  }
+
+  async function rpcAll(fn){
+    var all=[], from=0, size=1000, guard=0;
+    while(true){
+      var r = await sb.rpc(fn, { p_offset:from, p_limit:size });
+      if(r.error) throw r.error;
+      var chunk = r.data||[];
+      all = all.concat(chunk);
+      if(chunk.length < size) break;
+      from += size;
+      if(++guard > 500) break;
+    }
+    return all;
+  }
+
+  async function loadBoxi(){
+    if(!sb) return;
+    try{
+      state.boxes = await rpcAll("sklad_boxi");
+      state.loaded = true;
+      if(state.tab==="boxi") renderBoxiTab();
+    }catch(err){
+      state.loaded = true;
+      var c = el("content"); if(c) c.innerHTML = '<div class="alert err">Napaka pri nalaganju podatkov: '+esc(err.message||err)+'</div>';
+    }
+  }
+
+  /* ------- Zgodovina (admin) ------- */
+  function renderZgodovinaTab(){
+    var c = el("content"); if(!c) return;
+    if(!state.dogLoaded){ c.innerHTML = '<div class="boot"><div class="spinner"></div></div>'; return; }
+    c.innerHTML =
+      '<div class="toolbar">'+
+      '<input class="search" id="dq" placeholder="Iskanje: bar koda, dejanje, uporabnik..." value="'+esc(state.dq)+'" />'+
+      '<span class="count" id="dcount"></span>'+
+      '</div><div class="tablecard" id="dtablecard"></div>';
+    el("dq").addEventListener("input", function(e){ state.dq=e.target.value; refreshDog(); });
+    refreshDog();
+  }
+
+  function refreshDog(){
+    var cols = [
+      {k:"cas", t:"Čas", r:function(x){return fmtDT(x.cas);}},
+      {k:"barkoda", t:"Bar koda", r:function(x){return '<span class="mono">'+dash(x.barkoda)+'</span>';}},
+      {k:"dejanje", t:"Dejanje", r:function(x){return dash(x.dejanje);}},
+      {k:"status_nov", t:"Nov status", r:function(x){return x.status_nov?statusChip(x.status_nov):'<span class="dash">–</span>';}},
+      {k:"lokacija", t:"Lokacija", r:function(x){return dash(x.lokacija);}},
+      {k:"uporabnik", t:"Uporabnik", r:function(x){return dash(x.uporabnik);}},
+      {k:"opomba", t:"Opomba", r:function(x){return dash(x.opomba);}}
+    ];
+    var q = state.dq.trim().toLowerCase();
+    var rows = state.dogodki.filter(function(x){
+      if(!q) return true;
+      return [x.barkoda,x.dejanje,x.uporabnik,x.opomba,x.status_nov].join(" ").toLowerCase().indexOf(q)>=0;
+    });
+    rows = sortRows(rows, state.dSortKey, state.dSortDir);
+    var head = '<tr>'+cols.map(function(c){ var ar=state.dSortKey===c.k?'<span class="ar">'+(state.dSortDir>0?"▲":"▼")+'</span>':''; return '<th data-k="'+c.k+'">'+esc(c.t)+ar+'</th>'; }).join("")+'</tr>';
+    var body = rows.length ? rows.map(function(x){ return '<tr>'+cols.map(function(c){return '<td>'+c.r(x)+'</td>';}).join("")+'</tr>'; }).join("")
+      : '<tr><td colspan="'+cols.length+'"><div class="empty">Ni zapisov v zgodovini.</div></td></tr>';
+    el("dtablecard").innerHTML = '<div class="tablescroll"><table><thead>'+head+'</thead><tbody>'+body+'</tbody></table></div>';
+    var dc = el("dcount"); if(dc) dc.textContent = rows.length+" zapisov";
+    Array.prototype.forEach.call(document.querySelectorAll("#dtablecard th"), function(th){
+      th.addEventListener("click", function(){ var k=th.getAttribute("data-k"); if(state.dSortKey===k) state.dSortDir*=-1; else{ state.dSortKey=k; state.dSortDir=1; } refreshDog(); });
+    });
+  }
+
+  async function loadDogodki(){
+    if(!sb || !state.isAdmin) return;
+    if(state.dogLoaded){ renderZgodovinaTab(); return; }
+    try{
+      state.dogodki = await rpcAll("sklad_dogodki");
+      state.dogLoaded = true;
+      if(state.tab==="zgodovina") renderZgodovinaTab();
+    }catch(err){
+      state.dogLoaded = true;
+      var c = el("content"); if(c) c.innerHTML = '<div class="alert err">Napaka: '+esc(err.message||err)+'</div>';
+    }
+  }
+
+  /* ---------------- MODAL / PODROBNOSTI ---------------- */
+  function showModal(inner){
+    closeModal();
+    var ov=document.createElement("div"); ov.className="overlay"; ov.id="overlay";
+    ov.innerHTML='<div class="modal">'+inner+'</div>';
+    document.body.appendChild(ov);
+    ov.addEventListener("click", function(e){ if(e.target===ov) closeModal(); });
+  }
+  function closeModal(){ stopScanner(); var ov=el("overlay"); if(ov&&ov.parentNode) ov.parentNode.removeChild(ov); }
+  function fld(label,input){ return '<div class="fld"><label>'+esc(label)+'</label>'+input+'</div>'; }
+  function drow(k,v){ return '<div class="drow"><span class="dk">'+esc(k)+'</span><span class="dv">'+v+'</span></div>'; }
+
+  function openDetail(box){
+    var admin=state.isAdmin, inner='';
+    inner+='<div class="modal-h"><span>Škatla '+esc(box.barkoda)+'</span><button class="x" id="mx">&times;</button></div>';
+    if(admin){
+      var statusOpts=Object.keys(STATUSI).map(function(k){ return '<option value="'+k+'"'+(box.status===k?' selected':'')+'>'+esc(STATUSI[k])+'</option>'; }).join("");
+      var narOpts=["aktivna","pavza","zakljucena","preklicana"].map(function(k){ return '<option value="'+k+'"'+(box.narocnina_status===k?' selected':'')+'>'+esc(k)+'</option>'; }).join("");
+      inner+='<div class="mbody"><div class="fgrid">'+
+        fld("Bar koda",'<input id="d_barkoda" value="'+esc(box.barkoda||"")+'" />')+
+        fld("Status",'<select id="d_status">'+statusOpts+'</select>')+
+        fld("Stranka (e-pošta)",'<input id="d_kupec" value="'+esc(box.kupec_email||"")+'" placeholder="prazno = brez stranke" />')+
+        fld("Lokacija (oznaka)",'<input id="d_lokacija" value="'+esc(box.lokacija||"")+'" placeholder="npr. A-01-03" />')+
+        (box.narocnina_id?fld("Naročnina",'<select id="d_narstatus">'+narOpts+'</select>'):'')+
+        (box.narocnina_id?fld("Velja od",'<input type="date" id="d_od" value="'+esc(String(box.datum_od||"").slice(0,10))+'" />'):'')+
+        (box.narocnina_id?fld("Velja do",'<input type="date" id="d_do" value="'+esc(String(box.datum_do||"").slice(0,10))+'" />'):'')+
+        fld("Opomba",'<textarea id="d_opomba" rows="2">'+esc(box.opomba||"")+'</textarea>')+
+        '</div>'+
+        '<div class="roinfo">Št. stranke: <b>'+dash(box.stevilka_stranke)+'</b> &middot; Naročilo: <b>'+dash(box.narocilo_stevilka||box.narocilo_id)+'</b> &middot; ID: '+box.id+'</div>'+
+        '<div id="d_err"></div></div>'+
+        '<div class="mfoot"><button class="btn ghost" id="d_print">Natisni bar kodo</button><span style="flex:1"></span><button class="btn ghost" id="d_cancel">Prekliči</button><button class="btn" id="d_save">Shrani</button></div>';
+    }else{
+      inner+='<div class="mbody"><div class="dlist">'+
+        drow("Bar koda",'<span class="mono">'+esc(box.barkoda)+'</span>')+
+        drow("Status",statusChip(box.status))+
+        drow("Stranka",dash(box.kupec))+
+        drow("Št. stranke",dash(box.stevilka_stranke))+
+        drow("Naročilo",dash(box.narocilo_stevilka||box.narocilo_id))+
+        drow("Naročnina",dash(box.narocnina_status))+
+        drow("Velja od",box.datum_od?fmtD(box.datum_od):"–")+
+        drow("Velja do",box.datum_do?fmtD(box.datum_do):"–")+
+        drow("Lokacija",dash(box.lokacija))+
+        drow("Opomba",dash(box.opomba))+
+        drow("Posodobljeno",box.posodobljeno?fmtDT(box.posodobljeno):"–")+
+        '</div></div>'+
+        '<div class="mfoot"><button class="btn ghost" id="d_print">Natisni bar kodo</button><span style="flex:1"></span><button class="btn" id="d_cancel">Zapri</button></div>';
+    }
+    showModal(inner);
+    el("mx").onclick=closeModal;
+    el("d_cancel").onclick=closeModal;
+    el("d_print").onclick=function(){ printBarcode(box); };
+    if(admin){ var sv=el("d_save"); if(sv) sv.onclick=function(){ saveBox(box); }; }
+  }
+
+  async function saveBox(box){
+    var g=function(id){ var e=el(id); return e?e.value:null; };
+    var payload={ p_id:box.id, p_barkoda:g("d_barkoda"), p_status:g("d_status"),
+      p_kupec_email:g("d_kupec"), p_lokacija_koda:g("d_lokacija"), p_opomba:g("d_opomba"),
+      p_datum_od:(g("d_od")||null), p_datum_do:(g("d_do")||null), p_nar_status:(g("d_narstatus")||null) };
+    var btn=el("d_save"); if(btn){ btn.disabled=true; btn.textContent="Shranjujem..."; }
+    try{
+      var r=await sb.rpc("sklad_update_box", payload);
+      if(r.error) throw r.error;
+      closeModal();
+      state.loaded=false; renderBoxiTab(); await loadBoxi();
+    }catch(err){
+      var e=el("d_err"); if(e) e.innerHTML='<div class="alert err">Napaka: '+esc(err.message||err)+'</div>';
+      if(btn){ btn.disabled=false; btn.textContent="Shrani"; }
+    }
+  }
+
+  function printBarcode(box){
+    var w=window.open("","_blank","width=460,height=340");
+    if(!w){ alert("Dovoli pojavna okna za tiskanje bar kode."); return; }
+    var val=JSON.stringify(String(box.barkoda||""));
+    var owner=esc(box.kupec||box.stevilka_stranke||"—");
+    var html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Bar koda '+esc(box.barkoda)+'</title>'+
+      '<style>body{font-family:Arial,sans-serif;text-align:center;margin:26px;color:#222}h2{margin:0 0 2px;font-size:20px}.sub{color:#666;font-size:13px;margin-bottom:16px}svg{max-width:100%}</style>'+
+      '<scr'+'ipt src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></scr'+'ipt></head>'+
+      '<body><h2>Rabimbox</h2><div class="sub">'+owner+'</div><svg id="bc"></svg>'+
+      '<scr'+'ipt>window.onload=function(){try{JsBarcode("#bc",'+val+',{format:"CODE128",displayValue:true,fontSize:18,height:80,margin:10});}catch(e){document.body.insertAdjacentHTML("beforeend","<p>Napaka pri risanju kode.</p>");}setTimeout(function(){window.print();},350);};</scr'+'ipt>'+
+      '</body></html>';
+    w.document.open(); w.document.write(html); w.document.close();
+  }
+
+  /* ---------------- SKENER ---------------- */
+  var scanner=null;
+  function openScanner(){
+    showModal('<div class="modal-h"><span>Skeniraj bar kodo</span><button class="x" id="mx">&times;</button></div>'+
+      '<div class="mbody"><div id="reader"></div><div class="scanres" id="scanres"><span class="muted" style="font-size:13px">Usmeri kamero v bar kodo škatle.</span></div></div>'+
+      '<div class="mfoot"><span style="flex:1"></span><button class="btn ghost" id="scanclose">Zapri</button></div>');
+    el("mx").onclick=closeModal;
+    el("scanclose").onclick=closeModal;
+    startScanner();
+  }
+  function startScanner(){
+    var res=el("scanres");
+    if(typeof Html5Qrcode==="undefined"){ if(res) res.innerHTML='<div class="alert err">Knjižnica za skeniranje se ni naložila (preveri internet).</div>'; return; }
+    try{ localStorage.setItem("rb_cam","1"); }catch(e){}
+    try{ scanner=new Html5Qrcode("reader"); }catch(e){ if(res) res.innerHTML='<div class="alert err">Napaka pri zagonu skenerja.</div>'; return; }
+    var fmts=[];
+    try{ fmts=[Html5QrcodeSupportedFormats.CODE_128,Html5QrcodeSupportedFormats.CODE_39,Html5QrcodeSupportedFormats.EAN_13,Html5QrcodeSupportedFormats.QR_CODE]; }catch(e){ fmts=undefined; }
+    var config={ fps:10, qrbox:{width:260,height:160} };
+    if(fmts) config.formatsToSupport=fmts;
+    scanner.start({facingMode:"environment"}, config, onScanSuccess, function(){})
+      .catch(function(err){
+        if(res) res.innerHTML='<div class="alert err">Ni dostopa do kamere. Če odpiraš aplikacijo kot datoteko (file://), brskalnik kamere pogosto ne dovoli — objavi aplikacijo na spletu (https) ali dovoli dostop do kamere v brskalniku.</div>';
+      });
+  }
+  function onScanSuccess(text){
+    stopScanner();
+    var res=el("scanres"); if(!res) return;
+    var box=state.boxes.filter(function(b){ return String(b.barkoda)===String(text); })[0];
+    if(box){
+      res.innerHTML='<div class="alert info">Škatla <b>'+esc(box.barkoda)+'</b> — '+(box.kupec?('lastnik: <b>'+esc(box.kupec)+'</b> (št. stranke '+esc(box.stevilka_stranke||"-")+')'):'ni dodeljena nobeni stranki')+'.</div>'+
+        '<button class="btn" id="opendet">Odpri podrobnosti</button> <button class="btn ghost" id="again">Skeniraj znova</button>';
+      var od=el("opendet"); if(od) od.onclick=function(){ closeModal(); openDetail(box); };
+    }else{
+      res.innerHTML='<div class="alert err">Škatle s kodo <b>'+esc(text)+'</b> ni v sistemu.</div><button class="btn ghost" id="again">Skeniraj znova</button>';
+    }
+    var ag=el("again"); if(ag) ag.onclick=function(){ res.innerHTML='<span class="muted" style="font-size:13px">Usmeri kamero v bar kodo škatle.</span>'; startScanner(); };
+  }
+  function stopScanner(){
+    if(scanner){ var s=scanner; scanner=null; try{ s.stop().then(function(){ try{ s.clear(); }catch(e){} }).catch(function(){}); }catch(e){} }
+  }
+
+  /* ---------------- INIT ---------------- */
+  if(!sb){
+    APP.innerHTML = '<div class="login-wrap"><div class="login-card"><div class="alert err">Ni bilo mogoče naložiti Supabase. Preveri internetno povezavo.</div></div></div>';
+  }else{
+    sb.auth.getSession().then(function(s){
+      var user = s && s.data && s.data.session ? s.data.session.user : null;
+      var email = user ? String(user.email).toLowerCase() : null;
+      if(email && (email===ADMIN_EMAIL || email==="skladiscnik@rabimbox.si")){ afterLogin(); }
+      else { viewLogin(); }
+    }).catch(function(){ viewLogin(); });
+  }
+})();

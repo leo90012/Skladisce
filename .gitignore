@@ -1,0 +1,22 @@
+# Sistemske datoteke
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Urejevalniki
+.vscode/
+.idea/
+*.swp
+*~
+
+# Odvisnosti in gradnja (če se kdaj dodajo)
+node_modules/
+dist/
+build/
+
+# Lokalne skrivnosti – NIKOLI v repozitorij
+.env
+.env.*
+*.key
+secrets.txt
+gesla.txt
