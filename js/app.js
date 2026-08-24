@@ -3,8 +3,18 @@
   "use strict";
   var CFG = window.RABIMBOX_CONFIG || {};
   var APP = document.getElementById("app");
+  // Lastna shramba seje: skladiščna aplikacija in spletna stran sta na isti domeni,
+  // zato bi si brez tega delili prijavo. Tako si lahko hkrati prijavljen kot
+  // skladiščnik/admin tukaj in kot stranka na rabimbox strani.
   var sb = (window.supabase && window.supabase.createClient)
-    ? window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { auth:{ persistSession:true } })
+    ? window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {
+        auth: {
+          persistSession: true,
+          storageKey: "rb-skladisce-auth",   // ločeno od privzetega ključa strani
+          autoRefreshToken: true,
+          detectSessionInUrl: false
+        }
+      })
     : null;
 
   // uporabniško ime -> e-naslov
