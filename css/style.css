@@ -138,11 +138,6 @@ tbody tr.rowlink{cursor:pointer}
   border-radius:20px;background:var(--red);color:#fff;font-size:11px;font-weight:700;text-align:center;vertical-align:middle}
 .tabs button.active .tabbadge{background:#fff;color:var(--brand)}
 
-.chip.z-nova{background:#fff3e2;color:var(--amber)}
-.chip.z-potrjena{background:#e9f5fb;color:#1a7fa8}
-.chip.z-v_izvajanju{background:#f3eefe;color:var(--violet)}
-.chip.z-zakljucena{background:#e6f6ea;color:var(--green)}
-.chip.z-preklicana{background:#fdeceb;color:var(--red)}
 .chip.vir-narocilo{background:#e8f0ff;color:var(--brand)}
 .chip.vir-zahteva{background:#eef1f6;color:#5b6675}
 
@@ -156,3 +151,15 @@ td .danes{font-weight:700;color:var(--brand)}
 .zactions .btn{padding:8px 14px;font-size:13px}
 .btn.ghost.danger{color:var(--red);border-color:#f3c9c5}
 .btn.ghost.danger:hover{background:#fdeceb}
+
+/* Statusi naročil */
+.chip.z-nova{background:#fdeceb;color:var(--red);font-weight:700}
+.chip.z-caka_dostavo{background:#fff3e2;color:var(--amber)}
+.chip.z-pri_stranki{background:#f3eefe;color:var(--violet)}
+.chip.z-v_skladiscu{background:#e6f6ea;color:var(--green)}
+.chip.z-zakljuceno{background:#eef1f6;color:#5b6675}
+.chip.z-preklicano{background:#fdeceb;color:var(--red)}
+
+/* Neobdelano naročilo naj izstopa */
+tbody tr.nova-vrstica{background:#fffaf7}
+tbody tr.nova-vrstica td:first-child{box-shadow:inset 3px 0 0 var(--red)}
