@@ -163,3 +163,11 @@ td .danes{font-weight:700;color:var(--brand)}
 /* Neobdelano naročilo naj izstopa */
 tbody tr.nova-vrstica{background:#fffaf7}
 tbody tr.nova-vrstica td:first-child{box-shadow:inset 3px 0 0 var(--red)}
+
+/* Seznam škatel v podrobnostih naročila */
+.boxlist-h{font-weight:700;color:var(--heading);font-size:13px;margin:0 0 6px}
+.boxlist{max-height:190px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+.boxrow{display:flex;align-items:center;gap:10px;padding:6px 10px;border-bottom:1px solid var(--line);font-size:13px}
+.boxrow:last-child{border-bottom:0}
+.boxrow .mono{min-width:92px}
+.boxrow .muted{margin-left:auto;font-size:12px;color:var(--muted)}

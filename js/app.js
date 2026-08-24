@@ -24,16 +24,16 @@
   // Statusi naročil/zahtev – enake vrednosti v obeh tabelah (glej sql/integracija.sql)
   var Z_STATUSI = {
     nova:"Novo – neobdelano",
-    caka_dostavo:"Čaka na dostavo",
+    caka_dostavo:"Sprejeto – čaka na dostavo",
     pri_stranki:"Pri stranki",
     v_skladiscu:"V skladišču",
     zakljuceno:"Zaključeno",
     preklicano:"Preklicano"
   };
-  // korake, ki jih delavec označi (v tem vrstnem redu se izpišejo gumbi)
+  // koraki, ki jih delavec označi (v tem vrstnem redu se izpišejo gumbi)
   var Z_KORAKI = ["caka_dostavo","pri_stranki","v_skladiscu","zakljuceno","preklicano"];
   var Z_GUMBI = {
-    caka_dostavo:"Čaka na dostavo",
+    caka_dostavo:"Potrdi naročilo",
     pri_stranki:"Pri stranki",
     v_skladiscu:"V skladišču",
     zakljuceno:"Zaključi",
@@ -56,7 +56,8 @@
     boxes:[], dogodki:[], zahteve:[], loaded:false, dogLoaded:false, zahLoaded:false,
     q:"", fStatus:"", fNar:"", sortKey:"id", sortDir:1,
     dq:"", dSortKey:"cas", dSortDir:-1,
-    zq:"", zStatus:"", zVir:"", zOpenOnly:true, zSortKey:"", zSortDir:1
+    zq:"", zStatus:"", zVir:"", zOpenOnly:true, zSortKey:"", zSortDir:1,
+    boxiZaZahtevo:{}
   };
 
   function esc(x){return String(x==null?"":x).replace(/[&<>"']/g,function(m){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m];});}
@@ -183,7 +184,14 @@
       }},
       {k:"vir", t:"Vir", r:function(x){ return virChip(x.vir); }},
       {k:"vrsta", t:"Storitev", r:function(x){ return dash(x.vrsta); }},
-      {k:"st_boxov", t:"Boxi", r:function(x){ return x.st_boxov?('<b>'+x.st_boxov+'</b>'):'<span class="dash">–</span>'; }},
+      {k:"st_boxov", t:"Boxi", r:function(x){
+        var kljuc = x.vir+":"+x.id;
+        var b = state.boxiZaZahtevo[kljuc];
+        if(b === undefined) return (x.st_boxov?('<b>'+x.st_boxov+'</b>'):'<span class="dash">–</span>')+' <span class="muted" style="font-size:11px">…</span>';
+        if(!b.length) return '<span class="dash">–</span>';
+        var kode = b.slice(0,3).map(function(s){ return esc(s.barkoda||("#"+s.id)); }).join(", ");
+        return '<b>'+b.length+'</b> <span class="mono" style="font-size:11.5px">'+kode+(b.length>3?" …":"")+'</span>';
+      }},
       {k:"kupec", t:"Stranka", r:function(x){ return dash(x.kupec); }},
       {k:"stevilka_stranke", t:"Št. stranke", r:function(x){ return '<span class="mono">'+dash(x.stevilka_stranke)+'</span>'; }}
     ];
@@ -266,12 +274,27 @@
       '<div class="stat"><div class="n"><span class="dot" style="background:var(--green)"></span>'+c.v_skladiscu+'</div><div class="l">V skladišču</div></div>';
   }
 
+  // Za vsako naročilo naloži pripadajoče škatle (da so številke vidne v seznamu)
+  async function loadBoxiZaZahteve(){
+    var seznam = state.zahteve.slice(0, 60);
+    for(var i=0;i<seznam.length;i++){
+      var z = seznam[i], kljuc = z.vir+":"+z.id;
+      if(state.boxiZaZahtevo[kljuc] !== undefined) continue;
+      try{
+        var r = await sb.rpc("sklad_zahteva_skatle", { p_id: z.id, p_vir: z.vir });
+        state.boxiZaZahtevo[kljuc] = (r && !r.error && r.data) ? r.data : [];
+      }catch(e){ state.boxiZaZahtevo[kljuc] = []; }
+    }
+    if(state.tab==="zahteve" && state.zahLoaded) refreshZahteve();
+  }
+
   async function loadZahteve(){
     if(!sb) return;
     try{
       state.zahteve = await rpcAll("sklad_zahteve");
       state.zahLoaded = true;
       renderMain();
+      loadBoxiZaZahteve();
     }catch(err){
       state.zahLoaded = true;
       var c = el("content");
@@ -329,15 +352,26 @@
 
   async function loadZahtevaSkatle(z){
     var box = el("zskatle"); if(!box) return;
+    var kljuc = z.vir+":"+z.id;
     try{
-      var r = await sb.rpc("sklad_zahteva_skatle", { p_id: z.id, p_vir: z.vir });
-      if(r.error) throw r.error;
-      var arr = r.data||[];
-      if(!arr.length){ box.innerHTML = 'Tem naročilu še ni dodeljena nobena škatla.'; return; }
-      var prikaz = arr.slice(0,20).map(function(s){ return '<span class="mono">'+esc(s.barkoda||("#"+s.id))+'</span>'; }).join(", ");
-      box.innerHTML = 'Škatle ('+arr.length+'): '+prikaz+(arr.length>20?' …':'')+
-        '<br><span class="muted" style="font-size:12px">Ob spremembi stanja se status teh škatel posodobi samodejno.</span>';
-    }catch(e){ box.innerHTML = 'Škatel ni bilo mogoče naložiti.'; }
+      var arr = state.boxiZaZahtevo[kljuc];
+      if(arr === undefined){
+        var r = await sb.rpc("sklad_zahteva_skatle", { p_id: z.id, p_vir: z.vir });
+        if(r.error) throw r.error;
+        arr = r.data||[];
+        state.boxiZaZahtevo[kljuc] = arr;
+      }
+      if(!arr.length){ box.innerHTML = 'Tej stranki ni dodeljena nobena škatla.'; return; }
+      var vrstice = arr.map(function(s){
+        return '<div class="boxrow"><span class="mono">'+esc(s.barkoda||("#"+s.id))+'</span>'+
+               statusChip(s.status)+
+               '<span class="muted">'+(s.lokacija?esc(s.lokacija):'lokacija ni določena')+'</span></div>';
+      }).join("");
+      box.innerHTML = '<div class="boxlist-h">Škatle stranke ('+arr.length+')</div><div class="boxlist">'+vrstice+'</div>'+
+        '<div class="muted" style="font-size:12px;margin-top:6px">Ob spremembi stanja naročila se status teh škatel posodobi samodejno.</div>';
+    }catch(e){
+      box.innerHTML = '<div class="alert err" style="margin:0">Škatel ni bilo mogoče naložiti: '+esc(e.message||e)+'</div>';
+    }
   }
 
   async function setZStatus(z, novKey){
