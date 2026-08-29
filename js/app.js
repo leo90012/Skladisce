@@ -80,6 +80,12 @@
     ? '<span class="chip vir-narocilo">Spletno naročilo</span>'
     : '<span class="chip vir-zahteva">Zahteva iz panela</span>'; }
   function dash(v){ return (v==null||v==="")?'<span class="dash">–</span>':esc(v); }
+  function toast(msg){
+    var t=document.getElementById("toast");
+    if(!t){ t=document.createElement("div"); t.id="toast"; document.body.appendChild(t); }
+    t.textContent=msg; t.classList.add("show");
+    clearTimeout(t._t); t._t=setTimeout(function(){ t.classList.remove("show"); }, 4200);
+  }
   function LOGO(){ return "Slike/5.png"; }
 
   /* ---------------- LOGIN ---------------- */
@@ -249,9 +255,9 @@
     var body = rows.length
       ? rows.map(function(x){
           var nova = zKey(x.status)==="nova" ? " nova-vrstica" : "";
-          return '<tr class="rowlink'+nova+'" data-key="'+esc(x.vir+":"+x.id)+'">'+cols.map(function(c){ return '<td>'+c.r(x)+'</td>'; }).join("")+'</tr>';
+          return '<tr class="rowlink'+nova+'" data-key="'+esc(x.vir+":"+x.id)+'">'+cols.map(function(c){ return '<td data-l="'+esc(c.t)+'">'+c.r(x)+'</td>'; }).join("")+'</tr>';
         }).join("")
-      : '<tr><td colspan="'+cols.length+'">'+prazno+'</td></tr>';
+      : '<tr><td class="empty-cell" colspan="'+cols.length+'">'+prazno+'</td></tr>';
     el("ztablecard").innerHTML = '<div class="tablescroll"><table><thead>'+head+'</thead><tbody>'+body+'</tbody></table></div>';
     var cnt = el("zcount"); if(cnt) cnt.textContent = rows.length+" / "+state.zahteve.length+" naročil";
     Array.prototype.forEach.call(document.querySelectorAll("#ztablecard th"), function(th){
@@ -336,6 +342,7 @@
         drow("Status", zChip(z.status))+
       '</div>'+
       '<div id="zskatle" class="roinfo">Nalagam škatle...</div>'+
+      prevzemBlok(z)+
       '<div class="fld" style="margin-top:12px"><label>Nov termin (neobvezno)</label><input type="date" id="z_datum" value="'+esc(String(z.datum_dostave||"").slice(0,10))+'" /></div>'+
       '<div id="z_err"></div></div>'+
       '<div class="mfoot">'+
@@ -351,8 +358,68 @@
       b.onclick=function(){ setZStatus(z, b.getAttribute("data-st")); };
     });
     loadZahtevaSkatle(z);
+    wirePrevzem(z);
     void kljuc;
   }
+  /* ---- Prevzem: koliko boxov je stranka res vzela ---- */
+  function eur(n){
+    if(n==null||n==="") return "–";
+    try{ return new Intl.NumberFormat("sl-SI",{style:"currency",currency:"EUR"}).format(n); }
+    catch(e){ return n+" €"; }
+  }
+  function prevzemBlok(z){
+    if(z.vir!=="narocilo") return '';           // samo spletna naročila imajo ceno
+    if(!z.st_boxov) return '';
+    if(z.st_boxov_dejansko != null){
+      return '<div class="prevzem done">'+
+        '<div class="ph">Prevzem že zabeležen</div>'+
+        '<div class="prow"><span>Naročeno</span><b>'+z.st_boxov+' boxov</b></div>'+
+        '<div class="prow"><span>Stranka vzela</span><b>'+z.st_boxov_dejansko+' boxov</b></div>'+
+        (Number(z.znesek_vracila)>0
+          ? '<div class="prow vracilo"><span>Za vračilo stranki</span><b>'+eur(z.znesek_vracila)+'</b></div>'
+          : '<div class="prow"><span>Vračilo</span><b>ni potrebno</b></div>')+
+        '</div>';
+    }
+    return '<div class="prevzem">'+
+      '<div class="ph">Prevzem – koliko boxov je stranka res vzela?</div>'+
+      '<div class="pinput">'+
+        '<button type="button" class="stepper" id="pv_minus">−</button>'+
+        '<input type="number" id="pv_boxov" inputmode="numeric" min="0" max="'+z.st_boxov+'" value="'+z.st_boxov+'" />'+
+        '<button type="button" class="stepper" id="pv_plus">+</button>'+
+        '<span class="muted">od '+z.st_boxov+'</span>'+
+      '</div>'+
+      '<div id="pv_izracun" class="pizracun">Vzeti vsi naročeni boxi – vračila ni.</div>'+
+      '<div class="hint">Ob kliku <b>Pri stranki</b> se odvečni boxi samodejno vrnejo v zalogo.</div>'+
+      '</div>';
+  }
+  function wirePrevzem(z){
+    var inp = el("pv_boxov"); if(!inp) return;
+    var minus = el("pv_minus"), plus = el("pv_plus");
+    var osvezi = async function(){
+      var v = parseInt(inp.value,10);
+      if(isNaN(v)||v<0) v=0;
+      if(v>z.st_boxov) v=z.st_boxov;
+      inp.value = v;
+      var box = el("pv_izracun"); if(!box) return;
+      if(v === z.st_boxov){ box.className="pizracun"; box.innerHTML="Vzeti vsi naročeni boxi – vračila ni."; return; }
+      box.className="pizracun cakam"; box.textContent="Računam...";
+      try{
+        var r = await sb.rpc("sklad_predogled_vracila", { p_narocilo_id: z.id, p_st_boxov_dejansko: v });
+        if(r.error) throw r.error;
+        var d = (r.data&&r.data[0])||null;
+        if(!d){ box.className="pizracun"; box.textContent="Izračuna ni bilo mogoče pripraviti."; return; }
+        box.className = "pizracun ok";
+        box.innerHTML = '<div class="prow"><span>Cena prej ('+z.st_boxov+' boxov)</span><b>'+eur(d.cena_prvotna)+'</b></div>'+
+                        '<div class="prow"><span>Cena zdaj ('+v+' boxov)</span><b>'+eur(d.cena_koncna)+'</b></div>'+
+                        '<div class="prow vracilo"><span>Za vračilo stranki</span><b>'+eur(d.vracilo)+'</b></div>'+
+                        '<div class="prow"><span>V zalogo se vrne</span><b>'+(z.st_boxov-v)+' boxov</b></div>';
+      }catch(e){ box.className="pizracun"; box.textContent="Izračuna ni bilo mogoče pripraviti: "+(e.message||e); }
+    };
+    inp.addEventListener("input", osvezi);
+    if(minus) minus.onclick=function(){ inp.value=Math.max(0,(parseInt(inp.value,10)||0)-1); osvezi(); };
+    if(plus)  plus.onclick=function(){ inp.value=Math.min(z.st_boxov,(parseInt(inp.value,10)||0)+1); osvezi(); };
+  }
+
   function zBtn(z, st, label){
     var cur = zKey(z.status);
     if(cur===st) return '';
@@ -390,6 +457,27 @@
     Array.prototype.forEach.call(btns, function(b){ b.disabled=true; });
     var datum = el("z_datum") ? (el("z_datum").value||null) : null;
     try{
+      var inp = el("pv_boxov");
+      // "Pri stranki" pri spletnem naročilu = potrditev prevzema z dejanskim številom boxov
+      if(novKey==="pri_stranki" && z.vir==="narocilo" && inp){
+        var vzeto = parseInt(inp.value,10);
+        if(isNaN(vzeto)||vzeto<0||vzeto>z.st_boxov) throw new Error("Vpiši veljavno število prevzetih boxov (0–"+z.st_boxov+").");
+        var pr = await sb.rpc("sklad_potrdi_prevzem", {
+          p_narocilo_id: z.id, p_st_boxov_dejansko: vzeto, p_opomba: null
+        });
+        if(pr.error) throw pr.error;
+        var d = (pr.data&&pr.data[0])||{};
+        if(datum && datum !== String(z.datum_dostave||"").slice(0,10)){
+          await sb.rpc("sklad_update_zahteva", { p_id:z.id, p_vir:z.vir, p_status:null, p_opomba:null, p_datum_dostave:datum });
+        }
+        closeModal();
+        toast(Number(d.vracilo)>0
+          ? "Prevzeto "+d.vzeto+" od "+d.naroceno+" · v zalogo "+d.vrnjeno_v_zalogo+" · vračilo "+eur(d.vracilo)
+          : "Prevzeto vseh "+d.vzeto+" boxov");
+        state.zahLoaded=false; state.loaded=false; state.boxiZaZahtevo={};
+        renderZahteveTab(); await loadZahteve(); loadBoxi();
+        return;
+      }
       var r = await sb.rpc("sklad_update_zahteva", {
         p_id: z.id, p_vir: z.vir,
         p_status: novKey,
@@ -484,9 +572,9 @@
     }).join("")+'</tr>';
     var body;
     if(!rows.length){
-      body = '<tr><td colspan="'+cols.length+'"><div class="empty"><img src="Slike/Skatle.png" alt="" /><div>Ni zadetkov.</div></div></td></tr>';
+      body = '<tr><td class="empty-cell" colspan="'+cols.length+'"><div class="empty"><img src="Slike/Skatle.png" alt="" /><div>Ni zadetkov.</div></div></td></tr>';
     }else{
-      body = rows.map(function(x){ return '<tr class="rowlink" data-id="'+x.id+'">'+cols.map(function(c){ return '<td>'+c.r(x)+'</td>'; }).join("")+'</tr>'; }).join("");
+      body = rows.map(function(x){ return '<tr class="rowlink" data-id="'+x.id+'">'+cols.map(function(c){ return '<td data-l="'+esc(c.t)+'">'+c.r(x)+'</td>'; }).join("")+'</tr>'; }).join("");
     }
     el("tablecard").innerHTML = '<div class="tablescroll"><table><thead>'+head+'</thead><tbody>'+body+'</tbody></table></div>';
     var cnt = el("count"); if(cnt) cnt.textContent = rows.length+" / "+state.boxes.length+" škatel";
@@ -566,8 +654,8 @@
     });
     rows = sortRows(rows, state.dSortKey, state.dSortDir);
     var head = '<tr>'+cols.map(function(c){ var ar=state.dSortKey===c.k?'<span class="ar">'+(state.dSortDir>0?"▲":"▼")+'</span>':''; return '<th data-k="'+c.k+'">'+esc(c.t)+ar+'</th>'; }).join("")+'</tr>';
-    var body = rows.length ? rows.map(function(x){ return '<tr>'+cols.map(function(c){return '<td>'+c.r(x)+'</td>';}).join("")+'</tr>'; }).join("")
-      : '<tr><td colspan="'+cols.length+'"><div class="empty">Ni zapisov v zgodovini.</div></td></tr>';
+    var body = rows.length ? rows.map(function(x){ return '<tr>'+cols.map(function(c){return '<td data-l="'+esc(c.t)+'">'+c.r(x)+'</td>';}).join("")+'</tr>'; }).join("")
+      : '<tr><td class="empty-cell" colspan="'+cols.length+'"><div class="empty">Ni zapisov v zgodovini.</div></td></tr>';
     el("dtablecard").innerHTML = '<div class="tablescroll"><table><thead>'+head+'</thead><tbody>'+body+'</tbody></table></div>';
     var dc = el("dcount"); if(dc) dc.textContent = rows.length+" zapisov";
     Array.prototype.forEach.call(document.querySelectorAll("#dtablecard th"), function(th){

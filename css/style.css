@@ -126,11 +126,7 @@ tbody tr.rowlink{cursor:pointer}
 .scanres{margin-top:14px}
 .scanres .btn{margin-top:6px}
 
-@media(max-width:640px){
-  .wrap{padding:14px}
-  .top .brand .tt{display:none}
-  .fgrid{grid-template-columns:1fr}
-}
+
 
 /* ---------- Zavihek Naročila (integracija s spletno stranjo) ---------- */
 .tabs button{position:relative}
@@ -171,3 +167,91 @@ tbody tr.nova-vrstica td:first-child{box-shadow:inset 3px 0 0 var(--red)}
 .boxrow:last-child{border-bottom:0}
 .boxrow .mono{min-width:92px}
 .boxrow .muted{margin-left:auto;font-size:12px;color:var(--muted)}
+
+/* ---------- Obvestilo (toast) ---------- */
+#toast{position:fixed;left:50%;bottom:22px;transform:translate(-50%,20px);z-index:200;
+  background:#2a3342;color:#fff;padding:12px 18px;border-radius:10px;font-size:13.5px;font-weight:500;
+  box-shadow:0 10px 30px rgba(16,24,40,.28);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;
+  max-width:calc(100vw - 32px);text-align:center}
+#toast.show{opacity:1;transform:translate(-50%,0)}
+
+/* ---------- Prevzem / vračilo ---------- */
+.prevzem{margin-top:14px;border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:#fafbfd}
+.prevzem.done{background:#f3f9f4;border-color:#cfe8d6}
+.prevzem .ph{font-weight:700;color:var(--heading);font-size:13.5px;margin-bottom:10px}
+.pinput{display:flex;align-items:center;gap:8px}
+.pinput input{width:96px;text-align:center;font-size:17px;font-weight:700;padding:10px;
+  border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--heading)}
+.pinput .stepper{width:44px;height:44px;border:1px solid var(--line);background:#fff;border-radius:8px;
+  font-size:22px;line-height:1;color:var(--heading);cursor:pointer;flex:none}
+.pinput .stepper:active{background:#eef1f6}
+.pinput .muted{color:var(--muted);font-size:13px}
+.pizracun{margin-top:10px;font-size:13px;color:var(--muted)}
+.pizracun.ok{color:var(--text);background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.pizracun.cakam{opacity:.6}
+.prow{display:flex;justify-content:space-between;gap:12px;padding:3px 0;font-size:13px}
+.prow b{color:var(--heading)}
+.prow.vracilo{border-top:1px solid var(--line);margin-top:4px;padding-top:6px}
+.prow.vracilo b{color:var(--green);font-size:15px}
+
+/* ============================================================
+   MOBILNI POGLED – tabele postanejo kartice
+   ============================================================ */
+@media (max-width:820px){
+  .wrap{padding:12px}
+  .top{flex-wrap:wrap;gap:8px;padding:10px 12px;position:sticky;top:0;z-index:50;
+       background:var(--card);border-bottom:1px solid var(--line)}
+  .top .brand img{height:26px}
+  .top .brand .tt{display:none}
+  .top .who{gap:6px;font-size:12px;flex-wrap:wrap}
+  .top .who > span:not(.pill){display:none}          /* e-naslov skrijemo */
+  .tabs{position:sticky;top:52px;z-index:40;background:var(--bg);padding:8px 0;margin:0 0 8px}
+  .tabs button{flex:1;padding:11px 8px;font-size:14px}
+
+  .stats{grid-template-columns:repeat(2,1fr);gap:8px}
+  .stat{padding:10px 12px}
+  .stat .n{font-size:20px}
+
+  .toolbar{flex-direction:column;align-items:stretch;gap:8px}
+  .toolbar .search,.toolbar select,.toolbar .chk{width:100%;font-size:16px;padding:11px 12px} /* 16px = brez zooma na iOS */
+  .toolbar .count{text-align:right}
+
+  /* tabela -> kartice */
+  .tablescroll{overflow:visible}
+  .tablecard{background:transparent;border:0;box-shadow:none}
+  table,thead,tbody,tr,td{display:block;width:100%}
+  thead{display:none}
+  tbody tr{background:var(--card);border:1px solid var(--line);border-radius:12px;
+    box-shadow:var(--shadow);margin-bottom:10px;padding:10px 12px}
+  tbody tr.nova-vrstica{border-left:4px solid var(--red)}
+  tbody tr.nova-vrstica td:first-child{box-shadow:none}
+  tbody td{border:0;padding:4px 0;display:flex;justify-content:space-between;align-items:center;gap:10px;
+    font-size:13.5px;text-align:right}
+  tbody td:before{content:attr(data-l);color:var(--muted);font-size:12px;font-weight:600;
+    text-align:left;flex:none;min-width:96px}
+  tbody td:empty{display:none}
+  tbody tr td.empty-cell{display:block;text-align:center}
+  tbody tr td.empty-cell:before{content:none}
+
+  /* modal čez cel zaslon */
+  .overlay{padding:0;place-items:stretch}
+  .modal{max-width:100%;max-height:100%;height:100%;border-radius:0}
+  .modal-h{position:sticky;top:0;background:#fff;z-index:2}
+  .mbody{padding:14px}
+  .mfoot{position:sticky;bottom:0;background:#fff;border-top:1px solid var(--line);
+    flex-wrap:wrap;gap:8px;padding:10px 12px}
+  .mfoot .btn{flex:1 1 46%;min-height:46px;font-size:14px}
+  .zactions{width:100%;gap:8px}
+  .zactions .btn{flex:1 1 46%;min-height:46px;padding:12px 10px;font-size:14px}
+  .fgrid{grid-template-columns:1fr}
+  .field input,.field select,.field textarea,.fld input,.fld select,.fld textarea{font-size:16px}
+
+  .boxlist{max-height:220px}
+  .boxrow{flex-wrap:wrap;gap:6px}
+  .boxrow .muted{margin-left:0;width:100%}
+}
+
+@media (max-width:420px){
+  .stats{grid-template-columns:1fr 1fr}
+  .zactions .btn,.mfoot .btn{flex:1 1 100%}
+}
