@@ -373,7 +373,8 @@
         drow("Opomba", dash(z.opomba))+
         drow("Status", zChip(z.status))+
       '</div>'+
-      '<div id="zskatle" class="roinfo">Nalagam škatle...</div>'+
+      // seznam za branje pokažemo samo, kadar ni seznama za izbiro boksov
+      (jeIzbiraBoksov(z) ? '' : '<div id="zskatle" class="roinfo">Nalagam škatle...</div>')+
       prevzemBlok(z)+
       '<div class="fld" style="margin-top:12px"><label>Nov termin (neobvezno)</label><input type="date" id="z_datum" value="'+esc(String(z.datum_dostave||"").slice(0,10))+'" /></div>'+
       '<div id="z_err"></div></div>'+
@@ -389,8 +390,8 @@
     Array.prototype.forEach.call(document.querySelectorAll(".zactions button[data-st]"), function(b){
       b.onclick=function(){ setZStatus(z, b.getAttribute("data-st")); };
     });
-    loadZahtevaSkatle(z);
-    wirePrevzem(z);
+    if(jeIzbiraBoksov(z)) wirePrevzem(z);
+    else loadZahtevaSkatle(z);
     void kljuc;
   }
   /* ---- Prevzem: koliko boxov je stranka res vzela ---- */
@@ -398,6 +399,10 @@
     if(n==null||n==="") return "–";
     try{ return new Intl.NumberFormat("sl-SI",{style:"currency",currency:"EUR"}).format(n); }
     catch(e){ return n+" €"; }
+  }
+  // Ali bo prikazan seznam s kljukicami za izbiro boksov?
+  function jeIzbiraBoksov(z){
+    return z.vir==="narocilo" && !!z.st_boxov && z.st_boxov_dejansko == null;
   }
   function prevzemBlok(z){
     if(z.vir!=="narocilo") return '';           // samo spletna naročila imajo ceno
