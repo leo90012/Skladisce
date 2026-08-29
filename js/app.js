@@ -413,43 +413,100 @@
         '</div>';
     }
     return '<div class="prevzem">'+
-      '<div class="ph">Prevzem – koliko boxov je stranka res vzela?</div>'+
-      '<div class="pinput">'+
-        '<button type="button" class="stepper" id="pv_minus">−</button>'+
-        '<input type="number" id="pv_boxov" inputmode="numeric" min="0" max="'+z.st_boxov+'" value="'+z.st_boxov+'" />'+
-        '<button type="button" class="stepper" id="pv_plus">+</button>'+
-        '<span class="muted">od '+z.st_boxov+'</span>'+
+      '<div class="ph">Prevzem – odkljukaj bokse, ki jih je stranka vzela</div>'+
+      '<div class="pv-orodja">'+
+        '<button type="button" class="btn ghost small" id="pv_vse">Označi vse</button>'+
+        '<button type="button" class="btn ghost small" id="pv_nic">Počisti</button>'+
+        '<button type="button" class="btn ghost small" id="pv_skener">Skeniraj box</button>'+
+        '<span class="pv-stevec" id="pv_stevec">0 / '+z.st_boxov+'</span>'+
       '</div>'+
-      '<div id="pv_izracun" class="pizracun">Vzeti vsi naročeni boxi – vračila ni.</div>'+
-      '<div class="hint">Ob kliku <b>Pri stranki</b> se odvečni boxi samodejno vrnejo v zalogo.</div>'+
+      '<div class="pv-seznam" id="pv_seznam"><div class="muted" style="padding:10px">Nalagam bokse...</div></div>'+
+      '<div id="pv_izracun" class="pizracun">Označi bokse, ki jih je stranka vzela.</div>'+
+      '<div class="hint">Neoznačeni boksi gredo ob kliku <b>Pri stranki</b> samodejno nazaj v zalogo.</div>'+
       '</div>';
   }
-  function wirePrevzem(z){
-    var inp = el("pv_boxov"); if(!inp) return;
-    var minus = el("pv_minus"), plus = el("pv_plus");
+
+  // seznam boksov naročila s kljukicami
+  async function wirePrevzem(z){
+    var ovoj = el("pv_seznam"); if(!ovoj) return;
+    var skatle = [];
+    try{
+      var r = await sb.rpc("sklad_skatle_narocila", { p_narocilo_id: z.id });
+      if(r.error) throw r.error;
+      skatle = r.data || [];
+    }catch(e){
+      ovoj.innerHTML = '<div class="alert err" style="margin:8px">Boksov ni bilo mogoče naložiti: '+esc(e.message||e)+'</div>';
+      return;
+    }
+    if(!skatle.length){
+      ovoj.innerHTML = '<div class="muted" style="padding:10px">Temu naročilu ni dodeljen noben boks.</div>';
+      return;
+    }
+    ovoj.innerHTML = skatle.map(function(s){
+      return '<label class="pv-vrstica">'+
+        '<input type="checkbox" class="pv-check" value="'+s.id+'" data-bar="'+esc(s.barkoda||"")+'" checked />'+
+        '<span class="pv-koda mono">'+esc(s.barkoda||("#"+s.id))+'</span>'+
+        statusChip(s.status)+
+        (s.lokacija?'<span class="pv-lok muted">'+esc(s.lokacija)+'</span>':'')+
+        '</label>';
+    }).join("");
+
+    var checks = function(){ return Array.prototype.slice.call(document.querySelectorAll(".pv-check")); };
+    var izbrani = function(){ return checks().filter(function(c){ return c.checked; }); };
+
     var osvezi = async function(){
-      var v = parseInt(inp.value,10);
-      if(isNaN(v)||v<0) v=0;
-      if(v>z.st_boxov) v=z.st_boxov;
-      inp.value = v;
+      var n = izbrani().length, skupaj = skatle.length;
+      var st = el("pv_stevec"); if(st) st.textContent = n+" / "+skupaj;
       var box = el("pv_izracun"); if(!box) return;
-      if(v === z.st_boxov){ box.className="pizracun"; box.innerHTML="Vzeti vsi naročeni boxi – vračila ni."; return; }
+      if(n === skupaj){ box.className="pizracun"; box.textContent="Stranka vzame vse bokse – vračila ni."; return; }
       box.className="pizracun cakam"; box.textContent="Računam...";
       try{
-        var r = await sb.rpc("sklad_predogled_vracila", { p_narocilo_id: z.id, p_st_boxov_dejansko: v });
+        var r = await sb.rpc("sklad_predogled_vracila", { p_narocilo_id: z.id, p_st_boxov_dejansko: n });
         if(r.error) throw r.error;
         var d = (r.data&&r.data[0])||null;
         if(!d){ box.className="pizracun"; box.textContent="Izračuna ni bilo mogoče pripraviti."; return; }
-        box.className = "pizracun ok";
-        box.innerHTML = '<div class="prow"><span>Cena prej ('+z.st_boxov+' boxov)</span><b>'+eur(d.cena_prvotna)+'</b></div>'+
-                        '<div class="prow"><span>Cena zdaj ('+v+' boxov)</span><b>'+eur(d.cena_koncna)+'</b></div>'+
+        box.className="pizracun ok";
+        box.innerHTML = '<div class="prow"><span>Cena prej ('+(d.naroceno||z.st_boxov)+' boxov)</span><b>'+eur(d.cena_prvotna)+'</b></div>'+
+                        '<div class="prow"><span>Cena zdaj ('+n+' boxov)</span><b>'+eur(d.cena_koncna)+'</b></div>'+
                         '<div class="prow vracilo"><span>Za vračilo stranki</span><b>'+eur(d.vracilo)+'</b></div>'+
-                        '<div class="prow"><span>V zalogo se vrne</span><b>'+(z.st_boxov-v)+' boxov</b></div>';
+                        '<div class="prow"><span>V zalogo se vrne</span><b>'+(skupaj-n)+' boxov</b></div>';
       }catch(e){ box.className="pizracun"; box.textContent="Izračuna ni bilo mogoče pripraviti: "+(e.message||e); }
     };
-    inp.addEventListener("input", osvezi);
-    if(minus) minus.onclick=function(){ inp.value=Math.max(0,(parseInt(inp.value,10)||0)-1); osvezi(); };
-    if(plus)  plus.onclick=function(){ inp.value=Math.min(z.st_boxov,(parseInt(inp.value,10)||0)+1); osvezi(); };
+
+    checks().forEach(function(c){ c.addEventListener("change", osvezi); });
+    var vse=el("pv_vse"), nic=el("pv_nic"), skener=el("pv_skener");
+    if(vse) vse.onclick=function(){ checks().forEach(function(c){ c.checked=true; }); osvezi(); };
+    if(nic) nic.onclick=function(){ checks().forEach(function(c){ c.checked=false; }); osvezi(); };
+    if(skener) skener.onclick=function(){ odpriSkenerZaPrevzem(osvezi); };
+    osvezi();
+  }
+
+  // skeniranje bar kode odkljuka ustrezen boks v seznamu
+  function odpriSkenerZaPrevzem(osvezi){
+    var stari = el("pv_scanwrap");
+    if(stari){ stopScanner(); stari.parentNode.removeChild(stari); return; }
+    var wrap = document.createElement("div");
+    wrap.id = "pv_scanwrap"; wrap.className = "pv-scan";
+    wrap.innerHTML = '<div id="reader"></div><div class="scanres" id="pv_scanres"><span class="muted" style="font-size:13px">Usmeri kamero v bar kodo boksa.</span></div>';
+    el("pv_seznam").parentNode.insertBefore(wrap, el("pv_seznam"));
+    var res = el("pv_scanres");
+    if(typeof Html5Qrcode==="undefined"){ res.innerHTML='<div class="alert err">Knjižnica za skeniranje se ni naložila.</div>'; return; }
+    try{ scanner = new Html5Qrcode("reader"); }
+    catch(e){ res.innerHTML='<div class="alert err">Skenerja ni bilo mogoče zagnati.</div>'; return; }
+    scanner.start({facingMode:"environment"}, {fps:10, qrbox:{width:250,height:150}}, function(text){
+      var c = Array.prototype.slice.call(document.querySelectorAll(".pv-check"))
+        .filter(function(x){ return String(x.getAttribute("data-bar"))===String(text); })[0];
+      if(c){
+        c.checked = true;
+        c.closest(".pv-vrstica").classList.add("skenirano");
+        res.innerHTML = '<div class="alert info">Označen boks <b>'+esc(text)+'</b>.</div>';
+        osvezi();
+      } else {
+        res.innerHTML = '<div class="alert err">Boks <b>'+esc(text)+'</b> ne pripada temu naročilu.</div>';
+      }
+    }, function(){}).catch(function(){
+      res.innerHTML='<div class="alert err">Ni dostopa do kamere. Aplikacija mora teči prek https.</div>';
+    });
   }
 
   function zBtn(z, st, label){
@@ -489,13 +546,19 @@
     Array.prototype.forEach.call(btns, function(b){ b.disabled=true; });
     var datum = el("z_datum") ? (el("z_datum").value||null) : null;
     try{
-      var inp = el("pv_boxov");
-      // "Pri stranki" pri spletnem naročilu = potrditev prevzema z dejanskim številom boxov
-      if(novKey==="pri_stranki" && z.vir==="narocilo" && inp){
-        var vzeto = parseInt(inp.value,10);
-        if(isNaN(vzeto)||vzeto<0||vzeto>z.st_boxov) throw new Error("Vpiši veljavno število prevzetih boxov (0–"+z.st_boxov+").");
-        var pr = await sb.rpc("sklad_potrdi_prevzem", {
-          p_narocilo_id: z.id, p_st_boxov_dejansko: vzeto, p_opomba: null
+      var seznam = document.querySelectorAll(".pv-check");
+      // "Pri stranki" pri spletnem naročilu = potrditev prevzema z izbranimi boksi
+      if(novKey==="pri_stranki" && z.vir==="narocilo" && seznam.length){
+        var izbrani = Array.prototype.slice.call(seznam)
+          .filter(function(c){ return c.checked; })
+          .map(function(c){ return Number(c.value); });
+        if(!izbrani.length && !confirm("Ni označen noben boks. Naročilo bo preklicano, vsi boksi pa gredo nazaj v zalogo. Nadaljujem?")) {
+          Array.prototype.forEach.call(btns, function(b){ b.disabled=false; });
+          return;
+        }
+        stopScanner();
+        var pr = await sb.rpc("sklad_potrdi_prevzem_izbrane", {
+          p_narocilo_id: z.id, p_skatle: izbrani, p_opomba: null
         });
         if(pr.error) throw pr.error;
         var d = (pr.data&&pr.data[0])||{};
@@ -503,9 +566,10 @@
           await sb.rpc("sklad_update_zahteva", { p_id:z.id, p_vir:z.vir, p_status:null, p_opomba:null, p_datum_dostave:datum });
         }
         closeModal();
-        toast(Number(d.vracilo)>0
-          ? "Prevzeto "+d.vzeto+" od "+d.naroceno+" · v zalogo "+d.vrnjeno_v_zalogo+" · vračilo "+eur(d.vracilo)
-          : "Prevzeto vseh "+d.vzeto+" boxov");
+        var spor = "Prevzeto "+d.vzeto+" od "+d.naroceno+" boxov";
+        if(Number(d.vrnjeno_v_zalogo)>0) spor += " · v zalogo "+d.vrnjeno_v_zalogo;
+        if(Number(d.vracilo)>0) spor += " · vračilo "+eur(d.vracilo);
+        toast(spor);
         state.zahLoaded=false; state.loaded=false; state.boxiZaZahtevo={};
         renderZahteveTab(); await loadZahteve(); loadBoxi();
         return;

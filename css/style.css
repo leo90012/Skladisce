@@ -179,13 +179,6 @@ tbody tr.nova-vrstica td:first-child{box-shadow:inset 3px 0 0 var(--red)}
 .prevzem{margin-top:14px;border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:#fafbfd}
 .prevzem.done{background:#f3f9f4;border-color:#cfe8d6}
 .prevzem .ph{font-weight:700;color:var(--heading);font-size:13.5px;margin-bottom:10px}
-.pinput{display:flex;align-items:center;gap:8px}
-.pinput input{width:96px;text-align:center;font-size:17px;font-weight:700;padding:10px;
-  border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--heading)}
-.pinput .stepper{width:44px;height:44px;border:1px solid var(--line);background:#fff;border-radius:8px;
-  font-size:22px;line-height:1;color:var(--heading);cursor:pointer;flex:none}
-.pinput .stepper:active{background:#eef1f6}
-.pinput .muted{color:var(--muted);font-size:13px}
 .pizracun{margin-top:10px;font-size:13px;color:var(--muted)}
 .pizracun.ok{color:var(--text);background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 10px}
 .pizracun.cakam{opacity:.6}
@@ -254,4 +247,32 @@ tbody tr.nova-vrstica td:first-child{box-shadow:inset 3px 0 0 var(--red)}
 @media (max-width:420px){
   .stats{grid-template-columns:1fr 1fr}
   .zactions .btn,.mfoot .btn{flex:1 1 100%}
+}
+
+/* ---------- Prevzem: izbira konkretnih boksov ---------- */
+.pv-orodja{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.pv-orodja .btn.small{padding:8px 12px;font-size:12.5px;min-height:38px}
+.pv-stevec{margin-left:auto;font-weight:700;color:var(--heading);font-size:14px;
+  background:#e8f0ff;color:var(--brand);border-radius:20px;padding:5px 12px}
+
+.pv-seznam{max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fff}
+.pv-vrstica{display:flex;align-items:center;gap:10px;padding:11px 12px;border-bottom:1px solid var(--line);
+  cursor:pointer;font-size:13.5px;min-height:46px}
+.pv-vrstica:last-child{border-bottom:0}
+.pv-vrstica:active{background:#f5f7fb}
+.pv-vrstica input[type=checkbox]{width:22px;height:22px;accent-color:var(--brand);flex:none;margin:0}
+.pv-vrstica .pv-koda{font-weight:700;color:var(--heading);min-width:92px}
+.pv-vrstica .pv-lok{margin-left:auto;font-size:12px}
+.pv-vrstica.skenirano{background:#e6f6ea}
+.pv-vrstica input:not(:checked) ~ .pv-koda{color:var(--muted);text-decoration:line-through}
+
+.pv-scan{margin-bottom:10px;border:1px solid var(--line);border-radius:10px;padding:10px;background:#fff}
+.pv-scan #reader{border-radius:8px;overflow:hidden}
+
+@media (max-width:820px){
+  .pv-seznam{max-height:44vh}
+  .pv-vrstica{min-height:52px;font-size:14.5px}
+  .pv-vrstica input[type=checkbox]{width:26px;height:26px}
+  .pv-orodja .btn.small{flex:1 1 30%;min-height:44px;font-size:13px}
+  .pv-stevec{flex:1 1 100%;margin-left:0;text-align:center}
 }
