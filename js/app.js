@@ -100,7 +100,7 @@
       '<div class="field"><label>Geslo</label><input id="pass" type="password" autocomplete="current-password" placeholder="********" /></div>'+
       '<button class="btn block" id="lbtn" type="submit">Prijava</button>'+
       '</form>'+
-      '<p class="login-hint">Dostop imata računa <b>skladiščnik</b> in <b>Admin</b>.</p>'+
+      '<p class="login-hint">Prijava je mogoča samo z računi, ki jih je odprl vodja.<br>Registracija tukaj ni na voljo.</p>'+
       '</div></div>';
     el("lform").addEventListener("submit", onLogin);
   }
@@ -120,13 +120,45 @@
     }catch(err){ viewLogin("Napaka pri prijavi. Poskusi znova."); }
   }
 
+  // Dostop ima samo, kdor je vpisan v tabelo "osebje" (glej sql/osebje-dostop.sql).
+  // Sama prijava v Supabase ne zadošča.
+  async function preveriVlogo(){
+    try{
+      var r = await sb.rpc("moja_vloga");
+      if(r.error) return { napaka: r.error.message };
+      return { vloga: r.data || null };
+    }catch(e){ return { napaka: e.message || String(e) }; }
+  }
+
   async function afterLogin(){
     var s = await sb.auth.getSession();
     var user = s && s.data && s.data.session ? s.data.session.user : null;
     if(!user){ viewLogin(); return; }
+
+    APP.innerHTML = '<div class="boot"><div class="spinner"></div></div>';
+    var v = await preveriVlogo();
+
+    if(v.napaka){
+      // funkcija še ne obstaja -> zasilno nazaj na staro preverjanje po e-pošti
+      var e = String(user.email).toLowerCase();
+      if(e !== ADMIN_EMAIL && e !== "skladiscnik@rabimbox.si"){
+        await sb.auth.signOut();
+        viewLogin("Ta račun nima dostopa do skladiščne aplikacije.");
+        return;
+      }
+      state.isAdmin = (e === ADMIN_EMAIL);
+    } else {
+      if(!v.vloga){
+        await sb.auth.signOut();
+        viewLogin("Ta račun nima dostopa do skladiščne aplikacije. Za dostop se obrni na vodjo.");
+        return;
+      }
+      state.isAdmin = (v.vloga === "admin");
+    }
+
     state.email = user.email;
-    state.isAdmin = (String(user.email).toLowerCase() === ADMIN_EMAIL);
     state.tab = "zahteve"; state.loaded=false; state.dogLoaded=false; state.zahLoaded=false;
+    state.boxiZaZahtevo = {};
     renderMain();
     loadZahteve();
     loadBoxi();
@@ -808,9 +840,8 @@
   }else{
     sb.auth.getSession().then(function(s){
       var user = s && s.data && s.data.session ? s.data.session.user : null;
-      var email = user ? String(user.email).toLowerCase() : null;
-      if(email && (email===ADMIN_EMAIL || email==="skladiscnik@rabimbox.si")){ afterLogin(); }
-      else { viewLogin(); }
+      // vlogo preveri afterLogin() prek baze; brez seje gremo na prijavo
+      if(user){ afterLogin(); } else { viewLogin(); }
     }).catch(function(){ viewLogin(); });
   }
 })();

@@ -40,10 +40,35 @@ python -m http.server 5173
 Dvoklik na `index.html` deluje tudi, a **skeniranje s kamero zahteva https** –
 zato za delo v skladišču uporabljaj objavljeno različico.
 
-## Prijava
+## Prijava in dostop
 
 Uporabniški imeni sta `skladiščnik` in `Admin`. Gesli nista v repozitoriju –
 hranjeni sta v upravitelju gesel.
+
+**Registracije v aplikaciji ni.** Dostop ima izključno tisti, ki je vpisan v
+tabelo `osebje` v Supabase. Sama prijava v Supabase ne zadošča – kdor ni v
+tabeli, se ne more prijaviti, tudi če ima naslov `@rabimbox.si`.
+
+### Dodajanje novega delavca
+
+1. Supabase → **Authentication → Users → Add user** (e-pošta + geslo)
+2. Supabase → **SQL Editor**:
+
+```sql
+insert into public.osebje (user_id, vloga)
+select id, 'skladiscnik'          -- ali 'admin'
+from auth.users where lower(email) = 'novi@rabimbox.si'
+on conflict (user_id) do update set vloga = excluded.vloga;
+```
+
+### Odvzem dostopa
+
+```sql
+delete from public.osebje
+where user_id = (select id from auth.users where lower(email) = 'nekdo@rabimbox.si');
+```
+
+Račun v Authentication lahko ostane – brez zapisa v `osebje` nima dostopa.
 
 ## Struktura
 
