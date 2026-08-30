@@ -243,11 +243,8 @@
       {k:"kupec", t:"Stranka", r:function(x){ return dash(x.kupec); }},
       {k:"stevilka_stranke", t:"Št. stranke", r:function(x){ return '<span class="mono">'+dash(x.stevilka_stranke)+'</span>'; }}
     ];
-    if(state.isAdmin){
-      cols.push({k:"kupec_email", t:"E-pošta", r:function(x){ return dash(x.kupec_email); }});
-      cols.push({k:"telefon", t:"Telefon", r:function(x){ return dash(x.telefon); }});
-    }
-    cols.push({k:"mesto", t:"Kraj", r:function(x){ return dash(x.mesto); }});
+    // E-pošta, telefon in kraj so namenoma samo v podrobnostih naročila,
+    // da tabela ostane pregledna (in da kontakti niso na očeh mimoidočim).
     cols.push({k:"status", t:"Status", r:function(x){ return zChip(x.status); }});
     cols.push({k:"placano", t:"Plačano", r:function(x){
       if(x.vir!=="narocilo") return '<span class="dash">–</span>';

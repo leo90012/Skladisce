@@ -158,7 +158,6 @@ td .danes{font-weight:700;color:var(--brand)}
 
 /* Neobdelano naročilo naj izstopa */
 tbody tr.nova-vrstica{background:#fffaf7}
-tbody tr.nova-vrstica td:first-child{box-shadow:inset 3px 0 0 var(--red)}
 
 /* Seznam škatel v podrobnostih naročila */
 .boxlist-h{font-weight:700;color:var(--heading);font-size:13px;margin:0 0 6px}
@@ -216,8 +215,7 @@ tbody tr.nova-vrstica td:first-child{box-shadow:inset 3px 0 0 var(--red)}
   thead{display:none}
   tbody tr{background:var(--card);border:1px solid var(--line);border-radius:12px;
     box-shadow:var(--shadow);margin-bottom:10px;padding:10px 12px}
-  tbody tr.nova-vrstica{border-left:4px solid var(--red)}
-  tbody tr.nova-vrstica td:first-child{box-shadow:none}
+  tbody tr.nova-vrstica{border-color:var(--line)}
   tbody td{border:0;padding:4px 0;display:flex;justify-content:space-between;align-items:center;gap:10px;
     font-size:13.5px;text-align:right}
   tbody td:before{content:attr(data-l);color:var(--muted);font-size:12px;font-weight:600;
