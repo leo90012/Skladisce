@@ -41,13 +41,11 @@
     preklicano:"Preklicano"
   };
   // koraki, ki jih delavec označi (v tem vrstnem redu se izpišejo gumbi)
-  var Z_KORAKI = ["caka_dostavo","pri_stranki","v_skladiscu","zakljuceno","preklicano"];
+  var Z_KORAKI = ["caka_dostavo","pri_stranki","v_skladiscu"];
   var Z_GUMBI = {
     caka_dostavo:"Potrdi naročilo",
     pri_stranki:"Pri stranki",
-    v_skladiscu:"V skladišču",
-    zakljuceno:"Zaključi",
-    preklicano:"Prekliči naročilo"
+    v_skladiscu:"V skladišču"
   };
   function zKey(s){
     var v = String(s||"").toLowerCase().replace(/\s+/g,"_");
