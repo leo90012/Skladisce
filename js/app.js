@@ -47,7 +47,7 @@
     pri_stranki:"Pri stranki",
     v_skladiscu:"V skladišču",
     zakljuceno:"Zaključi",
-    preklicano:"Prekliči"
+    preklicano:"Prekliči naročilo"
   };
   function zKey(s){
     var v = String(s||"").toLowerCase().replace(/\s+/g,"_");
@@ -379,11 +379,10 @@
         '<div class="zactions">'+
           Z_KORAKI.map(function(k){ return zBtn(z,k,Z_GUMBI[k]); }).join("")+
         '</div>'+
-        '<span style="flex:1"></span><button class="btn ghost" id="z_close">Zapri</button>'+
+        // "Zapri" ni potreben – okno zapre križec zgoraj desno
       '</div>';
     showModal(inner);
     el("mx").onclick=closeModal;
-    el("z_close").onclick=closeModal;
     Array.prototype.forEach.call(document.querySelectorAll(".zactions button[data-st]"), function(b){
       b.onclick=function(){ setZStatus(z, b.getAttribute("data-st")); };
     });
