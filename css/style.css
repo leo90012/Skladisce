@@ -276,3 +276,7 @@ tbody tr.nova-vrstica{background:#fffaf7}
   .pv-orodja .btn.small{flex:1 1 30%;min-height:44px;font-size:13px}
   .pv-stevec{flex:1 1 100%;margin-left:0;text-align:center}
 }
+
+/* Zaključek naročila – ločen od korakov, zelen (končno dejanje) */
+.zactions .btn.zakljuci{background:var(--green);border-color:var(--green)}
+.zactions .btn.zakljuci:hover{background:#008a23;border-color:#008a23}
