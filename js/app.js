@@ -75,8 +75,8 @@
   function fmtDT(d){ if(!d) return ""; var dt=new Date(d); if(isNaN(dt)) return String(d).slice(0,16); return ("0"+dt.getDate()).slice(-2)+"."+("0"+(dt.getMonth()+1)).slice(-2)+"."+dt.getFullYear()+" "+("0"+dt.getHours()).slice(-2)+":"+("0"+dt.getMinutes()).slice(-2); }
   function statusChip(s){ var k=s||"na_zalogi"; return '<span class="chip '+esc(k)+'">'+esc(STATUSI[k]||k)+'</span>'; }
   function zChip(s){ var k=zKey(s); return '<span class="chip z-'+esc(k)+'">'+esc(Z_STATUSI[k]||k)+'</span>'; }
-  function virChip(v){ return v==="narocilo"
-    ? '<span class="chip vir-narocilo">Spletno naročilo</span>'
+  function virChip(v, placano){ return v==="narocilo"
+    ? '<span class="chip vir-narocilo">'+(placano===false?"Ročni vnos":"Spletno naročilo")+'</span>'
     : '<span class="chip vir-zahteva">Zahteva iz panela</span>'; }
   function dash(v){ return (v==null||v==="")?'<span class="dash">–</span>':esc(v); }
   function toast(msg){
@@ -207,6 +207,7 @@
     var stOpts = Object.keys(Z_STATUSI).map(function(k){ return '<option value="'+k+'">'+esc(Z_STATUSI[k])+'</option>'; }).join("");
     c.innerHTML =
       '<div class="stats" id="zstats"></div>'+
+      '<div style="margin:0 0 14px"><button class="btn" id="zManual" type="button">Ročni vnos / nov profil</button></div>'+
       '<div class="toolbar">'+
       '<input class="search" id="zq" placeholder="Iskanje: stranka, naslov, št. stranke, telefon..." value="'+esc(state.zq)+'" />'+
       '<select id="zStatus"><option value="">Vsi statusi</option>'+stOpts+'</select>'+
@@ -219,7 +220,60 @@
     el("zStatus").value=state.zStatus; el("zStatus").addEventListener("change", function(e){ state.zStatus=e.target.value; refreshZahteve(); });
     el("zVir").value=state.zVir; el("zVir").addEventListener("change", function(e){ state.zVir=e.target.value; refreshZahteve(); });
     el("zOpen").addEventListener("change", function(e){ state.zOpenOnly=e.target.checked; refreshZahteve(); });
+    el("zManual").addEventListener("click", openManualForm);
     refreshZahteve();
+  }
+
+  function openManualForm(){
+    var times=[];
+    for(var h=9;h<=16;h++) times.push('<option value="'+("0"+h).slice(-2)+':00">'+("0"+h).slice(-2)+':00</option>');
+    showModal('<div class="modal-h"><span>Ročni vnos / nov profil</span><button class="x" id="mx">&times;</button></div>'+
+      '<form id="manualForm" class="mbody">'+
+        '<div class="fgrid">'+
+          fld("Ime",'<input id="mIme" required autocomplete="given-name" />')+
+          fld("Priimek",'<input id="mPriimek" required autocomplete="family-name" />')+
+          fld("E-pošta",'<input id="mEmail" type="email" required autocomplete="email" />')+
+          fld("Telefon",'<input id="mTelefon" required autocomplete="tel" />')+
+          fld("Naslov",'<input id="mNaslov" required autocomplete="street-address" />')+
+          fld("Poštna številka",'<input id="mPosta" required />')+
+          fld("Mesto",'<input id="mMesto" required />')+
+        '</div>'+
+        '<label class="chk" style="margin:14px 0;display:flex;gap:8px"><input type="checkbox" id="mOnly" /> Ustvari samo profil, brez naročila</label>'+
+        '<div id="mOrder" class="fgrid">'+
+          fld("Storitev",'<select id="mTip"><option value="skladiscenje">Skladiščenje</option><option value="izposoja">Izposoja</option></select>')+
+          fld("Število boxov",'<input id="mBoxi" type="number" min="1" max="360" value="10" />')+
+          fld("Datum dostave",'<input id="mDatum" type="date" />')+
+          fld("Ura",'<select id="mCas">'+times.join("")+'</select>')+
+          fld("Opomba",'<textarea id="mOpomba" rows="2"></textarea>')+
+        '</div>'+
+        '<p class="muted" style="font-size:12px;margin-top:12px">Stranka prejme povabilo za Moj profil. Ročno naročilo ne sproži Stripe plačila ali predračuna.</p>'+
+        '<div id="mError"></div>'+
+        '<div class="mfoot" style="padding:12px 0 0"><button class="btn" id="mSave" type="submit">Shrani</button><button class="btn ghost" type="button" id="mCancel">Prekliči</button></div>'+
+      '</form>');
+    el("mx").onclick=closeModal;
+    el("mCancel").onclick=closeModal;
+    el("mOnly").onchange=function(){ el("mOrder").style.display=this.checked?"none":"grid"; };
+    el("manualForm").onsubmit=async function(e){
+      e.preventDefault();
+      var only=el("mOnly").checked;
+      var body={ime:el("mIme").value.trim(),priimek:el("mPriimek").value.trim(),
+        email:el("mEmail").value.trim(),telefon:el("mTelefon").value.trim(),
+        naslov:el("mNaslov").value.trim(),postna_stevilka:el("mPosta").value.trim(),
+        mesto:el("mMesto").value.trim(),only_profile:only,
+        tip:el("mTip").value,st_boxov:Number(el("mBoxi").value),
+        datum_dostave:el("mDatum").value,cas_dostave:el("mCas").value,
+        opomba:el("mOpomba").value.trim()};
+      var btn=el("mSave"),err=el("mError");
+      btn.disabled=true;btn.textContent="Shranjujem...";err.innerHTML="";
+      try{
+        var res=await sb.functions.invoke("sklad-rocni-vnos",{body:body});
+        if(res.error||!res.data||res.data.error) throw new Error((res.data&&res.data.error)||(res.error&&res.error.message)||"Ročni vnos ni uspel.");
+        closeModal();
+        toast(only?"Profil ustvarjen; povabilo poslano.":"Naročilo "+res.data.stevilka+" ustvarjeno; povabilo poslano.");
+        if(!only){state.zahLoaded=false;renderZahteveTab();await loadZahteve();loadBoxi();}
+      }catch(ex){err.innerHTML='<div class="alert err">'+esc(ex.message||ex)+'</div>';
+        btn.disabled=false;btn.textContent="Shrani";}
+    };
   }
 
   function zahteveColumns(){
@@ -229,7 +283,7 @@
         var danes = x.datum_dostave && String(x.datum_dostave).slice(0,10)===todayISO();
         return '<span class="'+(danes?"danes":"")+'">'+d+(x.cas_dostave?' <span class="mono">'+esc(String(x.cas_dostave).slice(0,5))+'</span>':'')+'</span>';
       }},
-      {k:"vir", t:"Vir", r:function(x){ return virChip(x.vir); }},
+      {k:"vir", t:"Vir", r:function(x){ return virChip(x.vir,x.placano); }},
       {k:"vrsta", t:"Storitev", r:function(x){ return dash(x.vrsta); }},
       {k:"st_boxov", t:"Boxi", r:function(x){
         var kljuc = x.vir+":"+x.id;
@@ -247,7 +301,7 @@
     cols.push({k:"status", t:"Status", r:function(x){ return zChip(x.status); }});
     cols.push({k:"placano", t:"Plačano", r:function(x){
       if(x.vir!=="narocilo") return '<span class="dash">–</span>';
-      return x.placano ? '<span class="chip z-zakljuceno">Da</span>' : '<span class="chip z-preklicano">Ne</span>';
+      return x.placano ? '<span class="chip z-zakljuceno">Da</span>' : '<span class="chip vir-narocilo">Ročno</span>';
     }});
     return cols;
   }
@@ -356,7 +410,7 @@
     var inner =
       '<div class="modal-h"><span>'+(z.vir==="narocilo"?"Naročilo":"Zahteva")+' '+esc(z.stevilka||("#"+z.id))+'</span><button class="x" id="mx">&times;</button></div>'+
       '<div class="mbody"><div class="dlist">'+
-        drow("Vir", virChip(z.vir))+
+        drow("Vir", virChip(z.vir,z.placano))+
         drow("Storitev", dash(z.vrsta))+
         drow("Št. boxov", z.st_boxov?String(z.st_boxov):'<span class="dash">–</span>')+
         drow("Stranka", dash(z.kupec)+(z.stevilka_stranke?' <span class="mono">('+esc(z.stevilka_stranke)+')</span>':''))+
@@ -365,14 +419,14 @@
         drow("Naslov", naslovVrstica?esc(naslovVrstica):'<span class="dash">–</span>')+
         drow("Termin", (z.datum_dostave?fmtD(z.datum_dostave):"–")+(z.cas_dostave?' ob '+esc(String(z.cas_dostave).slice(0,5)):""))+
         (dodatki.length?drow("Dodatki", esc(dodatki.join(", "))):'')+
-        (z.vir==="narocilo"?drow("Plačano", z.placano?'<span class="chip z-zakljuceno">Da</span>':'<span class="chip z-preklicano">Ne</span>'):'')+
+        (z.vir==="narocilo"?drow("Način", z.placano?'<span class="chip z-zakljuceno">Plačano prek spleta</span>':'<span class="chip vir-narocilo">Ročni vnos</span>'):'')+
         drow("Opomba", dash(z.opomba))+
         drow("Status", zChip(z.status))+
       '</div>'+
       // seznam za branje pokažemo samo, kadar ni seznama za izbiro boksov
       (jeIzbiraBoksov(z) ? '' : '<div id="zskatle" class="roinfo">Nalagam škatle...</div>')+
       prevzemBlok(z)+
-      '<div class="fld" style="margin-top:12px"><label>Nov termin (neobvezno)</label><input type="date" id="z_datum" value="'+esc(String(z.datum_dostave||"").slice(0,10))+'" /></div>'+
+      (!Z_ZAPRTI[zKey(z.status)]?'<div class="fld" style="margin-top:12px"><label>Nov termin (neobvezno)</label><input type="date" id="z_datum" value="'+esc(String(z.datum_dostave||"").slice(0,10))+'" /></div>':'')+
       '<div id="z_err"></div></div>'+
       '<div class="mfoot">'+
         '<div class="zactions">'+
@@ -400,7 +454,7 @@
   }
   // Ali bo prikazan seznam s kljukicami za izbiro boksov?
   function jeIzbiraBoksov(z){
-    return z.vir==="narocilo" && !!z.st_boxov && z.st_boxov_dejansko == null;
+    return z.vir==="narocilo" && !Z_ZAPRTI[zKey(z.status)] && !!z.st_boxov && z.st_boxov_dejansko == null;
   }
   function prevzemBlok(z){
     if(z.vir!=="narocilo") return '';           // samo spletna naročila imajo ceno
@@ -514,8 +568,8 @@
 
   // Gumb za zaključek: samo pri spletnih naročilih in dokler niso zaključena
   function zakljuciBtn(z){
-    if(z.vir!=="narocilo") return '';
-    if(zKey(z.status)==="zakljuceno") return '';
+    if(Z_ZAPRTI[zKey(z.status)]) return '';
+    if(z.vir!=="narocilo") return '<button class="btn ghost" data-st="zakljuceno">Zaključi zahtevo</button>';
     return '<button class="btn zakljuci" id="z_zakljuci">Zaključi in vrni v zalogo</button>';
   }
 
@@ -568,6 +622,7 @@
 
   function zBtn(z, st, label){
     var cur = zKey(z.status);
+    if(Z_ZAPRTI[cur]) return '';
     if(cur===st) return '';
     var cls = (st==="preklicano") ? "btn ghost danger" : (st==="zakljuceno" ? "btn ghost" : "btn");
     return '<button class="'+cls+'" data-st="'+st+'">'+esc(label)+'</button>';
@@ -585,13 +640,33 @@
         state.boxiZaZahtevo[kljuc] = arr;
       }
       if(!arr.length){ box.innerHTML = 'Tej stranki ni dodeljena nobena škatla.'; return; }
+      var canReturn=z.vir==="narocilo" && z.st_boxov_dejansko!=null && !Z_ZAPRTI[zKey(z.status)];
       var vrstice = arr.map(function(s){
-        return '<div class="boxrow"><span class="mono">'+esc(s.barkoda||("#"+s.id))+'</span>'+
+        var active=s.status==="pri_stranki"||s.status==="v_skladiscu";
+        return '<div class="boxrow">'+(canReturn&&active?'<input type="checkbox" class="z-return-check" value="'+s.id+'" style="margin-right:8px" />':'')+
+               '<span class="mono">'+esc(s.barkoda||("#"+s.id))+'</span>'+
                statusChip(s.status)+
                '<span class="muted">'+(s.lokacija?esc(s.lokacija):'lokacija ni določena')+'</span></div>';
       }).join("");
       box.innerHTML = '<div class="boxlist-h">Škatle stranke ('+arr.length+')</div><div class="boxlist">'+vrstice+'</div>'+
-        '<div class="muted" style="font-size:12px;margin-top:6px">Ob spremembi stanja naročila se status teh škatel posodobi samodejno.</div>';
+        (canReturn?'<button type="button" class="btn ghost small" id="zReturn" style="margin-top:10px">Vrni izbrane boxe v zalogo</button>'+
+          '<div class="muted" style="font-size:12px;margin-top:6px">Nova mesečna cena začne veljati ob naslednji obnovi.</div>':
+          '<div class="muted" style="font-size:12px;margin-top:6px">Ob spremembi stanja naročila se status teh škatel posodobi samodejno.</div>');
+      var returnBtn=el("zReturn");
+      if(returnBtn) returnBtn.onclick=async function(){
+        var ids=Array.prototype.slice.call(document.querySelectorAll(".z-return-check:checked")).map(function(c){return Number(c.value);});
+        if(!ids.length){toast("Izberi vsaj en box.");return;}
+        if(!confirm("V zalogo vrnem "+ids.length+" izbranih boxov? Cena se spremeni šele ob naslednji obnovi.")) return;
+        returnBtn.disabled=true;returnBtn.textContent="Vračam...";
+        try{
+          var r=await sb.rpc("sklad_vrni_boxe",{p_narocilo_id:z.id,p_skatle:ids});
+          if(r.error) throw r.error;
+          closeModal();toast("V zalogo vrnjenih "+r.data+" boxov");
+          state.zahLoaded=false;state.loaded=false;state.boxiZaZahtevo={};
+          renderZahteveTab();await loadZahteve();loadBoxi();
+        }catch(e){var er=el("z_err");if(er)er.innerHTML='<div class="alert err">'+esc(e.message||e)+'</div>';
+          returnBtn.disabled=false;returnBtn.textContent="Vrni izbrane boxe v zalogo";}
+      };
     }catch(e){
       box.innerHTML = '<div class="alert err" style="margin:0">Škatel ni bilo mogoče naložiti: '+esc(e.message||e)+'</div>';
     }
