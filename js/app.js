@@ -545,6 +545,10 @@
       var r = await sb.rpc("sklad_zakljuci_narocilo", { p_narocilo_id: z.id, p_opomba: null });
       if(r.error) throw r.error;
       var res = (r.data && r.data[0]) || {};
+      try {
+        var mail = await sb.functions.invoke("poslji-obvestilo", { body: { tip:"zakljucek", narocilo_id:z.id } });
+        if(mail.error || (mail.data && mail.data.error)) console.warn("Zahvala stranki ni bila poslana:", mail.error || mail.data.error);
+      } catch(mailError) { console.warn("Zahvala stranki ni bila poslana:", mailError); }
 
       stopScanner();
       closeModal();
