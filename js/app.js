@@ -284,6 +284,7 @@
         return '<span class="'+(danes?"danes":"")+'">'+d+(x.cas_dostave?' <span class="mono">'+esc(String(x.cas_dostave).slice(0,5))+'</span>':'')+'</span>';
       }},
       {k:"vir", t:"Vir", r:function(x){ return virChip(x.vir,x.placano); }},
+      {k:"stevilka", t:"Naročilo", r:function(x){ return x.stevilka?'<span class="mono">'+esc(x.stevilka)+'</span>':'<span class="dash">–</span>'; }},
       {k:"vrsta", t:"Storitev", r:function(x){ return dash(x.vrsta); }},
       {k:"st_boxov", t:"Boxi", r:function(x){
         var kljuc = x.vir+":"+x.id;
@@ -408,9 +409,10 @@
     if(z.stopnice) dodatki.push("stopnice (nad 2 nadstropji)");
     if(z.pomoc_polnjenje) dodatki.push("pomoč pri polnjenju");
     var inner =
-      '<div class="modal-h"><span>'+(z.vir==="narocilo"?"Naročilo":"Zahteva")+' '+esc(z.stevilka||("#"+z.id))+'</span><button class="x" id="mx">&times;</button></div>'+
+      '<div class="modal-h"><span>'+(z.vir==="narocilo"?"Naročilo "+esc(z.stevilka||("#"+z.id)):"Zahteva #"+esc(z.id))+'</span><button class="x" id="mx">&times;</button></div>'+
       '<div class="mbody"><div class="dlist">'+
         drow("Vir", virChip(z.vir,z.placano))+
+        (z.vir==="zahteva"?drow("Povezano naročilo",dash(z.stevilka)):'')+
         drow("Storitev", dash(z.vrsta))+
         drow("Št. boxov", z.st_boxov?String(z.st_boxov):'<span class="dash">–</span>')+
         drow("Stranka", dash(z.kupec)+(z.stevilka_stranke?' <span class="mono">('+esc(z.stevilka_stranke)+')</span>':''))+
