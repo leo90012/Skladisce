@@ -14,7 +14,7 @@ Klik na vrstico odpre podrobnosti z gumbi: Potrdi → V izvajanje → Zaključi 
 **Škatle** – vse škatle v sistemu: bar koda, status, stranka, naročnina, lokacija.
 Iskanje, filtri, razvrščanje in skeniranje bar kode s kamero.
 
-**Zgodovina** (samo administrator) – dnevnik sprememb škatel in statusov naročil.
+**Zgodovina** – dnevnik sprememb škatel in statusov naročil (vidi ga vse osebje).
 
 ## Statusi
 

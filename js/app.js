@@ -179,7 +179,7 @@
     var tabs = '<div class="tabs">'+
       '<button data-tab="zahteve" class="'+(state.tab==="zahteve"?"active":"")+'">Naročila'+badge+'</button>'+
       '<button data-tab="boxi" class="'+(state.tab==="boxi"?"active":"")+'">Škatle</button>'+
-      (state.isAdmin?'<button data-tab="zgodovina" class="'+(state.tab==="zgodovina"?"active":"")+'">Zgodovina</button>':'')+'</div>';
+      '<button data-tab="zgodovina" class="'+(state.tab==="zgodovina"?"active":"")+'">Zgodovina</button>'+'</div>';
     APP.innerHTML =
       '<div class="top"><div class="brand"><img src="'+LOGO()+'" alt="Rabimbox" /><span class="tt">Skladišče</span></div>'+
       '<div class="who"><button class="btn ghost small" id="scan">Skeniraj kodo</button>'+
@@ -416,8 +416,8 @@
         drow("Storitev", dash(z.vrsta))+
         drow("Št. boxov", z.st_boxov?String(z.st_boxov):'<span class="dash">–</span>')+
         drow("Stranka", dash(z.kupec)+(z.stevilka_stranke?' <span class="mono">('+esc(z.stevilka_stranke)+')</span>':''))+
-        (state.isAdmin?drow("E-pošta", z.kupec_email?'<a href="mailto:'+esc(z.kupec_email)+'">'+esc(z.kupec_email)+'</a>':'<span class="dash">–</span>'):'')+
-        (state.isAdmin?drow("Telefon", z.telefon?'<a href="tel:'+esc(String(z.telefon).replace(/\s/g,""))+'">'+esc(z.telefon)+'</a>':'<span class="dash">–</span>'):'')+
+        drow("E-pošta", z.kupec_email?'<a href="mailto:'+esc(z.kupec_email)+'">'+esc(z.kupec_email)+'</a>':'<span class="dash">–</span>')+
+        drow("Telefon", z.telefon?'<a href="tel:'+esc(String(z.telefon).replace(/\s/g,""))+'">'+esc(z.telefon)+'</a>':'<span class="dash">–</span>')+
         drow("Naslov", naslovVrstica?esc(naslovVrstica):'<span class="dash">–</span>')+
         drow("Termin", (z.datum_dostave?fmtD(z.datum_dostave):"–")+(z.cas_dostave?' ob '+esc(String(z.cas_dostave).slice(0,5)):""))+
         (dodatki.length?drow("Dodatki", esc(dodatki.join(", "))):'')+
@@ -752,10 +752,8 @@
       {k:"stevilka_stranke", t:"Št. stranke", r:function(x){return '<span class="mono">'+dash(x.stevilka_stranke)+'</span>';}},
       {k:"kupec", t:"Stranka", r:function(x){return dash(x.kupec);}}
     ];
-    if(state.isAdmin){
-      cols.push({k:"kupec_email", t:"E-pošta", r:function(x){return dash(x.kupec_email);}});
-      cols.push({k:"telefon", t:"Telefon", r:function(x){return dash(x.telefon);}});
-    }
+    cols.push({k:"kupec_email", t:"E-pošta", r:function(x){return dash(x.kupec_email);}});
+    cols.push({k:"telefon", t:"Telefon", r:function(x){return dash(x.telefon);}});
     cols.push({k:"narocilo_stevilka", t:"Naročilo", r:function(x){return '<span class="mono">'+dash(x.narocilo_stevilka||x.narocilo_id)+'</span>';}});
     cols.push({k:"narocnina_status", t:"Naročnina", r:function(x){return dash(x.narocnina_status);}});
     cols.push({k:"datum_od", t:"Velja od", r:function(x){return x.datum_od?fmtD(x.datum_od):'<span class="dash">–</span>';}});
@@ -894,7 +892,7 @@
   }
 
   async function loadDogodki(){
-    if(!sb || !state.isAdmin) return;
+    if(!sb) return;
     if(state.dogLoaded){ renderZgodovinaTab(); return; }
     try{
       state.dogodki = await rpcAll("sklad_dogodki");
@@ -942,6 +940,8 @@
         drow("Bar koda",'<span class="mono">'+esc(box.barkoda)+'</span>')+
         drow("Status",statusChip(box.status))+
         drow("Stranka",dash(box.kupec))+
+        drow("E-pošta",box.kupec_email?'<a href="mailto:'+esc(box.kupec_email)+'">'+esc(box.kupec_email)+'</a>':"–")+
+        drow("Telefon",box.telefon?'<a href="tel:'+esc(String(box.telefon).replace(/\s/g,""))+'">'+esc(box.telefon)+'</a>':"–")+
         drow("Št. stranke",dash(box.stevilka_stranke))+
         drow("Naročilo",dash(box.narocilo_stevilka||box.narocilo_id))+
         drow("Naročnina",dash(box.narocnina_status))+
