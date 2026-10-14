@@ -390,7 +390,11 @@
   async function loadZahteve(){
     if(!sb) return;
     try{
-      state.zahteve = await rpcAll("sklad_zahteve");
+      state.zahteve = (await rpcAll("sklad_zahteve")).map(function(z){
+        // Zahteve iz panela imajo uro samo v opombi ("... | Ura: 11:00 | ...").
+        if(!z.cas_dostave && z.vir==="zahteva"){ var m=/Ura:\s*(\d{1,2}:\d{2})/.exec(String(z.opomba||"")); if(m) z.cas_dostave=m[1]; }
+        return z;
+      });
       state.zahLoaded = true;
       renderMain();
       loadBoxiZaZahteve();
@@ -425,6 +429,7 @@
         drow("Opomba", dash(z.opomba))+
         drow("Status", zChip(z.status))+
       '</div>'+
+      (z.vir==="narocilo"?'<div style="margin:12px 0 0"><button class="btn ghost" id="z_pogodba" type="button">Natisni pogodbo</button></div>':'')+
       // seznam za branje pokažemo samo, kadar ni seznama za izbiro boksov
       (jeIzbiraBoksov(z) ? '' : '<div id="zskatle" class="roinfo">Nalagam škatle...</div>')+
       prevzemBlok(z)+
@@ -444,9 +449,31 @@
     });
     var zbtn = el("z_zakljuci");
     if(zbtn) zbtn.onclick=function(){ zakljuciNarocilo(z); };
+    var pbtn = el("z_pogodba");
+    if(pbtn) pbtn.onclick=function(){ natisniPogodbo(z); };
     if(jeIzbiraBoksov(z)) wirePrevzem(z);
     else loadZahtevaSkatle(z);
     void kljuc;
+  }
+  /* ---- Pogodba s podatki iz naročila ---- */
+  async function natisniPogodbo(z){
+    // Okno odpremo takoj ob kliku, sicer ga brskalnik blokira kot pojavno okno.
+    var okno = window.open("", "_blank");
+    if(!okno){ alert("Brskalnik je blokiral novo okno. Dovoli pojavna okna za to stran in poskusi znova."); return; }
+    okno.document.write('<p style="font-family:Arial;padding:20px">Pripravljam pogodbo…</p>');
+    var vrsta = String(z.vrsta||"").toLowerCase();
+    // Osnovni podatki, ki jih aplikacija že ima.
+    var d = { stevilka:z.stevilka, stevilka_stranke:z.stevilka_stranke, ime:z.kupec, priimek:"",
+      podjetje:"", davcna:"", naslov:z.naslov, postna_stevilka:z.postna_stevilka, mesto:z.mesto,
+      telefon:z.telefon, email:z.kupec_email, st_boxov:z.st_boxov, datum_dostave:z.datum_dostave,
+      tip: vrsta.indexOf("izpos")>-1 ? "izposoja" : (vrsta.indexOf("sklad")>-1 ? "skladiscenje" : ""), cena_opis:"" };
+    // Polni podatki naročila (podjetje, davčna, cena), če je v bazi funkcija sklad_pogodba.
+    try{
+      var r = await sb.rpc("sklad_pogodba", { p_id: z.id });
+      var row = r && !r.error && (Array.isArray(r.data) ? r.data[0] : r.data);
+      if(row){ Object.keys(row).forEach(function(k){ if(row[k]!=null && row[k]!=="") d[k]=row[k]; }); }
+    }catch(e){}
+    window.RBPogodba.prikazi(okno, d);
   }
   /* ---- Prevzem: koliko boxov je stranka res vzela ---- */
   function eur(n){
