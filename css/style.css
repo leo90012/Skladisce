@@ -280,3 +280,25 @@ tbody tr.nova-vrstica{background:#fffaf7}
 /* Zaključek naročila – ločen od korakov, zelen (končno dejanje) */
 .zactions .btn.zakljuci{background:var(--green);border-color:var(--green)}
 .zactions .btn.zakljuci:hover{background:#008a23;border-color:#008a23}
+
+/* ============================================================
+   TABLICE in zasloni na dotik (v20261014)
+   Lezeca tablica (nad 820 px) ostane pri tabeli, a z vecjimi tarcami za prst.
+   ============================================================ */
+@media (pointer:coarse){
+  .btn{min-height:46px}
+  .btn.small{min-height:42px;padding:10px 14px;font-size:13.5px}
+  .tabs button{min-height:46px;padding:11px 18px;font-size:14.5px}
+  .toolbar input.search,.toolbar select{min-height:46px;font-size:16px}
+  .toolbar .chk{min-height:44px}
+  .toolbar .chk input{width:20px;height:20px}
+  .modal-h .x{min-width:44px;min-height:44px;font-size:26px}
+  tbody td{padding-top:13px;padding-bottom:13px}
+  .field input,.field select,.field textarea,.fld input,.fld select,.fld textarea{font-size:16px;min-height:44px}
+}
+@media (min-width:821px) and (max-width:1199px){
+  .wrap{padding:16px}
+  .mfoot{flex-wrap:wrap;gap:8px}
+  .zactions{flex-wrap:wrap;gap:8px}
+  .zactions .btn{flex:1 1 auto;min-height:46px}
+}
