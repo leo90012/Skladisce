@@ -246,7 +246,7 @@
           fld("Ura",'<select id="mCas">'+times.join("")+'</select>')+
           fld("Opomba",'<textarea id="mOpomba" rows="2"></textarea>')+
         '</div>'+
-        '<p class="muted" style="font-size:12px;margin-top:12px">Stranka prejme povabilo za Moj profil. Ročno naročilo ne sproži Stripe plačila ali predračuna.</p>'+
+        '<p class="muted" style="font-size:12px;margin-top:12px">Stranka prejme e-pošto s povezavo za nastavitev gesla v Mojem profilu. Ročno naročilo ne sproži Stripe plačila ali predračuna.</p>'+
         '<div id="mError"></div>'+
         '<div class="mfoot" style="padding:12px 0 0"><button class="btn" id="mSave" type="submit">Shrani</button><button class="btn ghost" type="button" id="mCancel">Prekliči</button></div>'+
       '</form>');
@@ -269,7 +269,9 @@
         var res=await sb.functions.invoke("sklad-rocni-vnos",{body:body});
         if(res.error||!res.data||res.data.error) throw new Error((res.data&&res.data.error)||(res.error&&res.error.message)||"Ročni vnos ni uspel.");
         closeModal();
-        toast(only?"Profil ustvarjen; povabilo poslano.":"Naročilo "+res.data.stevilka+" ustvarjeno; povabilo poslano.");
+        var kaj=only?"Profil ustvarjen":"Naročilo "+res.data.stevilka+" ustvarjeno";
+        if(res.data.povabilo) toast(kaj+"; stranka je prejela e-pošto.");
+        else alert(kaj+", vendar e-pošta stranki NI bila poslana."+(res.data.email_napaka?"\n\n"+res.data.email_napaka:""));
         if(!only){state.zahLoaded=false;renderZahteveTab();await loadZahteve();loadBoxi();}
       }catch(ex){err.innerHTML='<div class="alert err">'+esc(ex.message||ex)+'</div>';
         btn.disabled=false;btn.textContent="Shrani";}
