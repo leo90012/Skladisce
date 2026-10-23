@@ -179,7 +179,8 @@
     var tabs = '<div class="tabs">'+
       '<button data-tab="zahteve" class="'+(state.tab==="zahteve"?"active":"")+'">Naročila'+badge+'</button>'+
       '<button data-tab="boxi" class="'+(state.tab==="boxi"?"active":"")+'">Škatle</button>'+
-      '<button data-tab="zgodovina" class="'+(state.tab==="zgodovina"?"active":"")+'">Zgodovina</button>'+'</div>';
+      '<button data-tab="zgodovina" class="'+(state.tab==="zgodovina"?"active":"")+'">Zgodovina</button>'+
+      (state.isAdmin?'<button data-tab="finance" class="'+(state.tab==="finance"?"active":"")+'">E-pošta in računi</button>':'')+'</div>';
     APP.innerHTML =
       '<div class="top"><div class="brand"><img src="'+LOGO()+'" alt="Rabimbox" /><span class="tt">Skladišče</span></div>'+
       '<div class="who"><button class="btn ghost small" id="scan">Skeniraj kodo</button>'+
@@ -197,6 +198,7 @@
     });
     if(state.tab==="boxi") renderBoxiTab();
     else if(state.tab==="zahteve") renderZahteveTab();
+    else if(state.tab==="finance"&&state.isAdmin) window.RBAdminBilling.mount({sb:sb,host:el("content"),esc:esc,fmtDT:fmtDT,openModal:showModal,closeModal:closeModal,toast:toast});
     else renderZgodovinaTab();
   }
 
@@ -241,7 +243,7 @@
         '<label class="chk" style="margin:14px 0;display:flex;gap:8px"><input type="checkbox" id="mOnly" /> Ustvari samo profil, brez naročila</label>'+
         '<div id="mOrder" class="fgrid">'+
           fld("Storitev",'<select id="mTip"><option value="skladiscenje">Skladiščenje</option><option value="izposoja">Izposoja</option></select>')+
-          fld("Število boxov",'<input id="mBoxi" type="number" min="1" max="360" value="10" />')+
+          fld("Število boxov",'<input id="mBoxi" type="number" min="1" max="5000" value="10" />')+
           fld("Datum dostave",'<input id="mDatum" type="date" />')+
           fld("Ura",'<select id="mCas">'+times.join("")+'</select>')+
           fld("Opomba",'<textarea id="mOpomba" rows="2"></textarea>')+
@@ -408,7 +410,11 @@
     }
   }
 
-  function openZahteva(z){
+  async function openZahteva(z){
+    var originalId=z.vir==="narocilo"?z.id:null;
+    if(!originalId&&z.stevilka){var link=await sb.from("narocila").select("id").eq("stevilka",z.stevilka).maybeSingle();originalId=link.data&&link.data.id;}
+    var detail=originalId?await sb.rpc("rb_billing_order_details",{p_id:originalId}):null;
+    var billing=detail&&detail.data;
     var kljuc = z.vir+":"+z.id;
     var naslovVrstica = [z.naslov, [z.postna_stevilka, z.mesto].filter(Boolean).join(" ")].filter(Boolean).join(", ");
     var dodatki = [];
@@ -417,17 +423,21 @@
     var inner =
       '<div class="modal-h"><span>'+(z.vir==="narocilo"?"Naročilo "+esc(z.stevilka||("#"+z.id)):"Zahteva #"+esc(z.id))+'</span><button class="x" id="mx">&times;</button></div>'+
       '<div class="mbody"><div class="dlist">'+
-        drow("Vir", virChip(z.vir,z.placano))+
+        drow("Vir",billing?(billing.is_test?"TEST · ":"")+(z.vir==="zahteva"?"Zahteva iz panela":billing.vir==="rocno"?"Ročni vnos":"Spletno naročilo"):virChip(z.vir,z.placano))+
+        drow("Način plačila",billing?({stripe_kartica:"Kartica · Stripe",trr:"Nakazilo na TRR",gotovina:"Gotovina"}[billing.nacin_placila]||"Ni zabeleženo"):"Ni zabeleženo")+
         (z.vir==="zahteva"?drow("Povezano naročilo",dash(z.stevilka)):'')+
-        drow("Storitev", dash(z.vrsta))+
+        drow("Storitev (produkt)", dash(z.vrsta))+
         drow("Št. boxov", z.st_boxov?String(z.st_boxov):'<span class="dash">–</span>')+
+        drow("Cena",billing?eur(billing.cena)+" / 30 dni":"Ni zabeleženo")+
+        drow("Datum naročila",fmtDT(billing?billing.datum_narocila:z.ustvarjeno))+
+        drow("Trajanje",billing&&billing.datum_od?fmtD(billing.datum_od)+" – "+fmtD(new Date(Date.parse(billing.datum_do+"T12:00:00Z")-86400000).toISOString()):"Ni zabeleženo")+
         drow("Stranka", dash(z.kupec)+(z.stevilka_stranke?' <span class="mono">('+esc(z.stevilka_stranke)+')</span>':''))+
         drow("E-pošta", z.kupec_email?'<a href="mailto:'+esc(z.kupec_email)+'">'+esc(z.kupec_email)+'</a>':'<span class="dash">–</span>')+
         drow("Telefon", z.telefon?'<a href="tel:'+esc(String(z.telefon).replace(/\s/g,""))+'">'+esc(z.telefon)+'</a>':'<span class="dash">–</span>')+
         drow("Naslov", naslovVrstica?esc(naslovVrstica):'<span class="dash">–</span>')+
-        drow("Termin", (z.datum_dostave?fmtD(z.datum_dostave):"–")+(z.cas_dostave?' ob '+esc(String(z.cas_dostave).slice(0,5)):""))+
+        drow("Termin dostave", (z.datum_dostave?fmtD(z.datum_dostave):"–")+(z.cas_dostave?' ob '+esc(String(z.cas_dostave).slice(0,5)):""))+
         (dodatki.length?drow("Dodatki", esc(dodatki.join(", "))):'')+
-        (z.vir==="narocilo"?drow("Način", z.placano?'<span class="chip z-zakljuceno">Plačano prek spleta</span>':'<span class="chip vir-narocilo">Ročni vnos</span>'):'')+
+        drow("Status plačila",billing?(billing.is_test?"Testni dokument":billing.billing_status==="past_due"?"Plačilo ni uspelo":billing.placano?"Plačano":"Neplačano"):"Ni zabeleženo")+
         drow("Opomba", dash(z.opomba))+
         drow("Status", zChip(z.status))+
       '</div>'+

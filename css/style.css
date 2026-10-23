@@ -302,3 +302,6 @@ tbody tr.nova-vrstica{background:#fffaf7}
   .zactions{flex-wrap:wrap;gap:8px}
   .zactions .btn{flex:1 1 auto;min-height:46px}
 }
+
+/* Administratorski dnevnik pošte in računov. */
+.table-wrap{overflow-x:auto;background:#fff;border:1px solid var(--line);border-radius:12px;margin:12px 0 24px}.table-wrap table{width:100%;border-collapse:collapse;min-width:760px}.table-wrap th,.table-wrap td{padding:12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}.table-wrap th{font-size:12px;color:var(--muted)}.table-wrap td{font-size:13px}.table-wrap td small{color:var(--red)}.rb-billing-card{margin-top:14px}

@@ -60,7 +60,7 @@
         '<p>Število zabojev: '+polje(d.st_boxov,120)+'</p>'+
         '<p>Dogovorjena cena (z DDV): '+polje(znesek,160)+'</p>'+
         '<p>Datum začetek skladiščenja/izposoje: '+polje(datum(d.datum_dostave),140)+'</p>'+
-        '<p><b>Podaljševanje najema:</b> Pogodba se sklepa za nedoločen čas. Najem se obračunava in samodejno podaljšuje na vsakih 30 dni do prekinitve (na podlagi izdanih računov), ob prevzemu pa je obvezen podpisan prevzemni obrazec.</p>'+
+        '<p><b>Podaljševanje najema:</b> Pogodba se sklepa za nedoločen čas. Najem se obračunava in samodejno podaljšuje na vsakih 30 dni do prekinitve s strankinim soglasjem k samodejni bremenitvi kartice pri spletnih naročilih; pri ročnih naročilih velja dogovorjeni način plačila. Pravočasna najava vračila vseh zabojev ustavi naslednjo obnovo tudi ob poznejši obdelavi v skladišču. Pri delnem vračilu nižja količina in cena veljata od naslednjega 30-dnevnega obdobja. Ob prevzemu pa je obvezen podpisan prevzemni obrazec.</p>'+
         '<p>Datum in kraj: <span class="crta" style="min-width:260px"></span></p>'+
       '</div>'+
       '<div class="podpisi">'+
@@ -70,13 +70,13 @@
       '<p class="obrni">(Pravila in pogoji na drugi strani - obrni)</p>'+
       '<div class="stran2">'+
         '<h2>Pravila in pogoji – Rabimbox skladiščenje/izposoja na zahtevo</h2>'+
-        '<p><b>1. SPLOŠNA DOLOČILA IN LASTNIŠTVO</b> Vsi zaboji so last podjetja Rabim d.o.o.. Stranka je dolžna zaboje vrniti v enakem stanju, kot jih je prejela. V primeru poškodovanega ali uničenega zaboja se zaračuna pavšalna odškodnina 40,00 EUR na zaboj. Zaboji morajo biti ob vračilu izpraznjeni in očiščeni, sicer se zaračuna strošek čiščenja 10,00 EUR na zaboj. Podjetje posluje preko predračuna (TRR) ali z gotovino ob prevzemu.</p>'+
+        '<p><b>1. SPLOŠNA DOLOČILA IN LASTNIŠTVO</b> Vsi zaboji so last podjetja Rabim d.o.o.. Stranka je dolžna zaboje vrniti v enakem stanju, kot jih je prejela. V primeru poškodovanega ali uničenega zaboja se zaračuna pavšalna odškodnina 40,00 EUR na zaboj. Zaboji morajo biti ob vračilu izpraznjeni in očiščeni, sicer se zaračuna strošek čiščenja 10,00 EUR na zaboj. Spletna naročila se plačujejo s kartico prek sistema Stripe; ročna naročila se plačujejo po dogovoru.</p>'+
         '<p><b>2. SKLADIŠČENJE NA ZAHTEVO</b></p>'+
-        '<p><b>Minimalni pogoji:</b> Najem vsaj 3 zabojev za minimalno obdobje 1 meseca.</p>'+
-        '<p><b>Avtomatsko podaljšanje in račun:</b> Po poteku minimalnega obdobja (1 mesec) se storitev samodejno podaljšuje mesečno. Izvajalec za vsako naslednje mesečno obdobje naročniku izda in pošlje račun za podaljšanje. Odpovedni rok za prekinitev skladiščenja znaša 3 dni pred iztekom 30-dnevnega obdobja.</p>'+
+        '<p><b>Minimalni pogoji:</b> Najem vsaj 3 zabojev za minimalno obdobje 30 dni.</p>'+
+        '<p><b>Avtomatsko podaljšanje in račun:</b> Po poteku minimalnega obdobja 30 dni se storitev podaljšuje za naslednjih 30 dni. Pri vključeni samodejni bremenitvi se kartica bremeni prek sistema Stripe, pet dni prej pa stranka prejme opomnik. Račun prejme po uspešnem plačilu. Odpovedni rok za prekinitev skladiščenja znaša 3 dni pred iztekom 30-dnevnega obdobja.</p>'+
         '<p><b>Logistika in teža:</b> Maksimalna dovoljena teža posameznega zaboja je 25 kg. Izvajalec si pridržuje pravico zavrniti prevzem pretežkih zabojev.</p>'+
         '<p><b>Odgovornost in kritje:</b> Izvajalec jamči za vsebino do vrednosti 50,00 EUR na zaboj v primeru lastne krivde. Brez podpisanega seznama vsebine s priloženimi fotografijami izvajalec ne odgovarja za manjkajoče stvari. Izvajalec ne odgovarja za mehanske ali elektronske okvare naprav brez zunanjih poškodb zaboja ali za škodo zaradi višje sile.</p>'+
-        '<p><b>Plačilo in zastava:</b> Prvi mesec se poravna vnaprej ob prevzemu zabojev. Izvajalec ima zastavno pravico na vsebini in ni dolžan vrniti stvari, dokler niso poravnane vse zapadle obveznosti.</p>'+
+        '<p><b>Plačilo in zastava:</b> Prvo 30-dnevno obdobje se poravna vnaprej ob spletnem naročilu oziroma po dogovoru pri ročnem naročilu. Izvajalec ima zastavno pravico na vsebini in ni dolžan vrniti stvari, dokler niso poravnane vse zapadle obveznosti.</p>'+
         '<p><b>Opuščeni predmeti:</b> Če naročnik ne poravna obveznosti več kot 90 dni in se ne odziva na pisna opozorila (poslana po e-pošti ali priporočeni pošti), se vsebina šteje za opuščeno in jo lahko podjetje proda za poplačilo dolgov ali uniči.</p>'+
         '<p><b>3. IZPOSOJA EMBALAŽE</b></p>'+
         '<p><b>Minimalni pogoji:</b> Najem zabojev za lastne potrebe stranke za minimalno obdobje 30 dni.</p>'+
