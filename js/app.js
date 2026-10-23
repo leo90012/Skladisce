@@ -426,8 +426,8 @@
         drow("Vir",billing?(billing.is_test?"TEST · ":"")+(z.vir==="zahteva"?"Zahteva iz panela":billing.vir==="rocno"?"Ročni vnos":"Spletno naročilo"):virChip(z.vir,z.placano))+
         drow("Način plačila",billing?({stripe_kartica:"Kartica · Stripe",trr:"Nakazilo na TRR",gotovina:"Gotovina"}[billing.nacin_placila]||"Ni zabeleženo"):"Ni zabeleženo")+
         (z.vir==="zahteva"?drow("Povezano naročilo",dash(z.stevilka)):'')+
-        drow("Storitev (produkt)", dash(z.vrsta))+
-        drow("Št. boxov", z.st_boxov?String(z.st_boxov):'<span class="dash">–</span>')+
+        drow("Storitev (produkt)", z.vir==="narocilo"&&billing?(billing.tip==="izposoja"?"Izposoja ":"Skladiščenje ")+billing.st_boxov+" boxov":dash(z.vrsta))+
+        drow("Št. boxov", z.vir==="narocilo"&&billing?String(billing.st_boxov):z.st_boxov?String(z.st_boxov):'<span class="dash">–</span>')+
         drow("Cena",billing?eur(billing.cena)+" / 30 dni":"Ni zabeleženo")+
         drow("Datum naročila",fmtDT(billing?billing.datum_narocila:z.ustvarjeno))+
         drow("Trajanje",billing&&billing.datum_od?fmtD(billing.datum_od)+" – "+fmtD(new Date(Date.parse(billing.datum_do+"T12:00:00Z")-86400000).toISOString()):"Ni zabeleženo")+
