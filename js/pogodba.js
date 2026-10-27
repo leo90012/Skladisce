@@ -41,19 +41,19 @@
     var naziv=[d.ime, d.priimek].filter(Boolean).join(" ");
     var nazivVrstica=[d.podjetje, naziv].filter(Boolean).join(", ");
     var naslov=[d.naslov, [d.postna_stevilka, d.mesto].filter(Boolean).join(" ")].filter(Boolean).join(", ");
-    var znesek=d.cena_opis || (cena(tip,d.st_boxov) ? eur(cena(tip,d.st_boxov))+" / mesec" : "");
+    var znesek=d.cena_opis || (cena(tip,d.st_boxov) ? eur(cena(tip,d.st_boxov))+" / 30 dni" : "");
     return '<!doctype html><html lang="sl"><head><meta charset="utf-8"><title>Pogodba '+esc(d.stevilka||"")+'</title><style>'+SLOG+'</style></head><body>'+
       '<div class="orodja"><button onclick="window.print()">Natisni / shrani PDF</button><span>Izpolnjeno iz naročila '+esc(d.stevilka||"")+'. Prazna polja se izpolnijo ob podpisu.</span></div>'+
       '<div class="list">'+
       '<h1>Pogodba o skladiščenju/izposoji na zahtevo - Rabimbox</h1>'+
       '<div class="izv"><p class="lbl">Izvajalec:</p><p>Rabim d.o.o.</p><p>Proletarska cesta 4</p><p>1000 Ljubljana</p>'+
-        '<p>Matična številka: 7155778000</p><p>Tel št.: +386 40 796 040</p><p>Mail: info@rabimbox.si</p></div>'+
+        '<p>Matična številka: 7155778000</p><p>Tel št.: +386 40 796 040</p><p>E-pošta: info@rabimbox.si</p></div>'+
       '<div class="nar"><p class="lbl">Naročnik</p>'+
-        '<p>ID Stranke: '+polje(d.stevilka_stranke,120)+'</p>'+
+        '<p>Številka stranke: '+polje(d.stevilka_stranke,120)+'</p>'+
         '<p>Ime Priimek/Naziv podjetja: '+polje(nazivVrstica,330)+'</p>'+
         '<p>Naslov prebivališča/Sedež podjetja: '+polje(naslov,300)+'</p>'+
         '<p>Tel. Številka: '+polje(d.telefon,330)+'</p>'+
-        '<p>Mail: '+polje(d.email,380)+'</p>'+
+        '<p>E-pošta: '+polje(d.email,380)+'</p>'+
         '<p>EMŠO/Davčna številka: '+polje(d.davcna,300)+'</p></div>'+
       '<div class="blok">'+
         '<p>Vrsta storitve: <span class="kv">'+(skl?"X":"")+'</span>Skladiščenje &nbsp;&nbsp; <span class="kv">'+(izp?"X":"")+'</span>Izposoja</p>'+

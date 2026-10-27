@@ -180,7 +180,8 @@
       '<button data-tab="zahteve" class="'+(state.tab==="zahteve"?"active":"")+'">Naročila'+badge+'</button>'+
       '<button data-tab="boxi" class="'+(state.tab==="boxi"?"active":"")+'">Škatle</button>'+
       '<button data-tab="zgodovina" class="'+(state.tab==="zgodovina"?"active":"")+'">Zgodovina</button>'+
-      (state.isAdmin?'<button data-tab="finance" class="'+(state.tab==="finance"?"active":"")+'">E-pošta in računi</button>':'')+'</div>';
+      (state.isAdmin?'<button data-tab="finance" class="'+(state.tab==="finance"?"active":"")+'">E-pošta</button>'+
+        '<button data-tab="racuni" class="'+(state.tab==="racuni"?"active":"")+'">Računi</button>':'')+'</div>';
     APP.innerHTML =
       '<div class="top"><div class="brand"><img src="'+LOGO()+'" alt="Rabimbox" /><span class="tt">Skladišče</span></div>'+
       '<div class="who"><button class="btn ghost small" id="scan">Skeniraj kodo</button>'+
@@ -198,7 +199,7 @@
     });
     if(state.tab==="boxi") renderBoxiTab();
     else if(state.tab==="zahteve") renderZahteveTab();
-    else if(state.tab==="finance"&&state.isAdmin) window.RBAdminBilling.mount({sb:sb,host:el("content"),esc:esc,fmtDT:fmtDT,openModal:showModal,closeModal:closeModal,toast:toast});
+    else if((state.tab==="finance"||state.tab==="racuni")&&state.isAdmin) window.RBAdminBilling.mount({sb:sb,host:el("content"),kind:state.tab==="racuni"?"invoices":"emails",esc:esc,fmtDT:fmtDT,openModal:showModal,closeModal:closeModal,toast:toast});
     else renderZgodovinaTab();
   }
 
