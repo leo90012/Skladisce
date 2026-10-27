@@ -19,6 +19,13 @@
           '</tbody></table>'+(d.emails.length?'':'<p class="muted">Ni evidentiranih sporočil.</p>')+'</div>':'<div class="table-wrap"><table><thead><tr><th>Številka</th><th>Stranka</th><th>Obdobje</th><th>Znesek</th><th>Status</th><th></th></tr></thead><tbody>'+
           d.invoices.map(function(r){return '<tr><td>'+esc(r.stripe_stevilka||r.stevilka)+badge(r)+'</td><td>'+esc(r.email||'')+'</td><td>'+esc(r.opis||'')+'</td><td>'+esc(Number(r.znesek||0).toFixed(2).replace('.',','))+' €</td><td>'+esc(r.is_test?'Testni dokument':r.placano||['placan','poslan','posiljanje'].indexOf(r.status)>=0?'Plačano':r.status||'Neplačano')+'</td><td><button class="btn ghost small rbInvoice" data-id="'+r.id+'" '+(r.placano||['placan','poslan','posiljanje'].indexOf(r.status)>=0?'':'disabled')+'>Prenesi PDF</button></td></tr>';}).join('')+
           '</tbody></table>'+(d.invoices.length?'':'<p class="muted">Ni evidentiranih računov.</p>')+'</div>')+'<div class="toolbar"><button class="btn ghost" id="rbPrev" '+(offset?'':'disabled')+'>Prejšnja stran</button><span>Od zapisa '+(offset+1)+'</span><button class="btn ghost" id="rbNext" '+(d.has_more?'':'disabled')+'>Naslednja stran</button></div>';
+        host.querySelectorAll('.table-wrap table').forEach(function(table){
+          var labels=Array.from(table.querySelectorAll('thead th'),function(th){return th.textContent||'Dejanje';});
+          table.querySelectorAll('tbody tr').forEach(function(row){Array.from(row.cells).forEach(function(cell,i){
+            cell.setAttribute('data-l',labels[i]);
+            var value=document.createElement('span');value.className='rb-cell';value.innerHTML=cell.innerHTML;cell.replaceChildren(value);
+          });});
+        });
         host.querySelector('#rbPrev').onclick=function(){offset=Math.max(0,offset-100);load();};host.querySelector('#rbNext').onclick=function(){offset+=100;load();};
         if(isMail){host.querySelector('#rbAllContacts').onclick=function(){exportContacts(false);};host.querySelector('#rbMarketing').onclick=function(){exportContacts(true);};}
         host.querySelectorAll('.rbEmail').forEach(function(b){b.onclick=function(){openEmail(Number(b.dataset.id));};});
