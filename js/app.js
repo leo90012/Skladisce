@@ -442,7 +442,8 @@
         drow("Opomba", dash(z.opomba))+
         drow("Status", zChip(z.status))+
       '</div>'+
-      (z.vir==="narocilo"?'<div style="margin:12px 0 0"><button class="btn ghost" id="z_pogodba" type="button">Natisni pogodbo</button></div>':'')+
+      (z.vir==="narocilo"?'<div style="margin:12px 0 0"><button class="btn ghost" id="z_pogodba" type="button">Natisni pogodbo</button>'+
+        (["pri_stranki","v_skladiscu","zakljuceno"].indexOf(zKey(z.status))>=0?'<button class="btn ghost" id="z_delivery_mail" type="button" style="margin-top:8px">Osnutek e-pošte s pogodbo</button>':'')+'</div>':'')+
       // seznam za branje pokažemo samo, kadar ni seznama za izbiro boksov
       (jeIzbiraBoksov(z) ? '' : '<div id="zskatle" class="roinfo">Nalagam škatle...</div>')+
       prevzemBlok(z)+
@@ -464,11 +465,26 @@
     if(zbtn) zbtn.onclick=function(){ zakljuciNarocilo(z); };
     var pbtn = el("z_pogodba");
     if(pbtn) pbtn.onclick=function(){ natisniPogodbo(z); };
+    var mailbtn=el("z_delivery_mail");
+    if(mailbtn) mailbtn.onclick=function(){ pripraviDostavniMail(z); };
     if(jeIzbiraBoksov(z)) wirePrevzem(z);
     else loadZahtevaSkatle(z);
     void kljuc;
   }
   /* ---- Pogodba s podatki iz naročila ---- */
+  function pripraviDostavniMail(z){
+    var draft=window.RBDeliveryEmail.build(z);
+    showModal('<div class="modal-h"><span>E-pošta s podpisano pogodbo</span><button class="x" id="rbDraftClose">×</button></div>'+
+      '<div class="mbody"><p class="muted">Odpri osnutek v svojem programu za e-pošto in pred pošiljanjem priloži sken podpisane pogodbe.</p>'+
+      '<div class="fld"><label for="rbDraftTo">Prejemnik</label><input id="rbDraftTo" type="email" value="'+esc(draft.to)+'" /></div>'+
+      '<div class="fld"><label for="rbDraftSubject">Zadeva</label><input id="rbDraftSubject" value="'+esc(draft.subject)+'" /></div>'+
+      '<div class="fld"><label for="rbDraftBody">Besedilo</label><textarea id="rbDraftBody" rows="14">'+esc(draft.body)+'</textarea></div></div>'+
+      '<div class="mfoot"><a class="btn" id="rbDraftOpen" href="'+esc(window.RBDeliveryEmail.mailto(draft))+'">Odpri osnutek v e-pošti</a><button class="btn ghost" id="rbDraftCopy">Kopiraj besedilo</button></div>');
+    el("rbDraftClose").onclick=closeModal;
+    function current(){return {to:el("rbDraftTo").value.trim(),subject:el("rbDraftSubject").value,body:el("rbDraftBody").value};}
+    ["rbDraftTo","rbDraftSubject","rbDraftBody"].forEach(function(id){el(id).oninput=function(){el("rbDraftOpen").href=window.RBDeliveryEmail.mailto(current());};});
+    el("rbDraftCopy").onclick=async function(){try{await navigator.clipboard.writeText(current().body);toast("Besedilo je kopirano. Pred pošiljanjem dodaj pogodbo.");}catch(e){el("rbDraftBody").focus();el("rbDraftBody").select();toast("Besedilo je označeno za kopiranje.");}};
+  }
   async function natisniPogodbo(z){
     // Okno odpremo takoj ob kliku, sicer ga brskalnik blokira kot pojavno okno.
     var okno = window.open("", "_blank");
@@ -667,6 +683,7 @@
     if(Z_ZAPRTI[cur]) return '';
     if(cur===st) return '';
     var cls = (st==="preklicano") ? "btn ghost danger" : (st==="zakljuceno" ? "btn ghost" : "btn");
+    if(st==="caka_dostavo")label=z.vir==="zahteva"?"Potrdi zahtevo (interno)":"Potrdi naročilo (interno)";
     return '<button class="'+cls+'" data-st="'+st+'">'+esc(label)+'</button>';
   }
 
@@ -693,7 +710,7 @@
       box.innerHTML = '<div class="boxlist-h">Škatle stranke ('+arr.length+')</div><div class="boxlist">'+vrstice+'</div>'+
         (canReturn?'<button type="button" class="btn ghost small" id="zReturn" style="margin-top:10px">Vrni izbrane boxe v zalogo</button>'+
           '<div class="muted" style="font-size:12px;margin-top:6px">Nova mesečna cena začne veljati ob naslednji obnovi.</div>':
-          '<div class="muted" style="font-size:12px;margin-top:6px">Ob spremembi stanja naročila se status teh škatel posodobi samodejno.</div>');
+          '<div class="muted" style="font-size:12px;margin-top:6px">Potrditev je interna. Status boxov spremeniš ob dejanski dostavi ali prevzemu.</div>');
       var returnBtn=el("zReturn");
       if(returnBtn) returnBtn.onclick=async function(){
         var ids=Array.prototype.slice.call(document.querySelectorAll(".z-return-check:checked")).map(function(c){return Number(c.value);});
