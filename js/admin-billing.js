@@ -6,7 +6,7 @@
     function api(action,body){return sb.functions.invoke("rb-billing",{body:Object.assign({action:action},body||{})}).then(async function(r){if(r.error){var b=r.error.context&&await r.error.context.json().catch(function(){return null;});throw new Error(b&&b.error||r.error.message);}if(r.data&&r.data.error)throw new Error(r.data.error);return r.data;});}
     function save(bytes,name,type){var url=URL.createObjectURL(new Blob([bytes],{type:type})),a=document.createElement("a");a.href=url;a.download=name;a.click();setTimeout(function(){URL.revokeObjectURL(url);},10000);}
     function badge(r){return r.is_test?' <span class="chip">TEST</span>':'';}
-    function mailStatus(status){return ({poslan:"Poslano",sent:"Poslano",delivered:"Dostavljeno",delivery_delayed:"Dostava zamuja",bounced:"Zavrnjeno",complained:"Označeno kot neželeno",opened:"Odprto",clicked:"Kliknjeno",scheduled:"Načrtovano",queued:"V čakalni vrsti",failed:"Napaka",napaka:"Napaka",posiljanje:"Pošiljanje"})[status]||"Ni podatka";}
+    function mailStatus(status){return ({poslano:"Poslano",dostavljeno:"Dostavljeno",zavrnjeno:"Zavrnjeno",odprto:"Odprto",kliknjeno:"Kliknjeno","prijavljeno kot neželeno":"Označeno kot neželeno",poslan:"Poslano",sent:"Poslano",delivered:"Dostavljeno",delivery_delayed:"Dostava zamuja",bounced:"Zavrnjeno",complained:"Označeno kot neželeno",opened:"Odprto",clicked:"Kliknjeno",scheduled:"Načrtovano",queued:"V čakalni vrsti",failed:"Napaka",napaka:"Napaka",posiljanje:"Pošiljanje"})[status]||"Ni podatka";}
     async function load(){
       host.innerHTML='<div class="boot"><div class="spinner"></div></div>';
       try{
