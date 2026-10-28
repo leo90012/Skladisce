@@ -473,17 +473,7 @@
   }
   /* ---- Pogodba s podatki iz naročila ---- */
   function pripraviDostavniMail(z){
-    var draft=window.RBDeliveryEmail.build(z);
-    showModal('<div class="modal-h"><span>E-pošta s podpisano pogodbo</span><button class="x" id="rbDraftClose">×</button></div>'+
-      '<div class="mbody"><p class="muted">Odpri osnutek v svojem programu za e-pošto in pred pošiljanjem priloži sken podpisane pogodbe.</p>'+
-      '<div class="fld"><label for="rbDraftTo">Prejemnik</label><input id="rbDraftTo" type="email" value="'+esc(draft.to)+'" /></div>'+
-      '<div class="fld"><label for="rbDraftSubject">Zadeva</label><input id="rbDraftSubject" value="'+esc(draft.subject)+'" /></div>'+
-      '<div class="fld"><label for="rbDraftBody">Besedilo</label><textarea id="rbDraftBody" rows="14">'+esc(draft.body)+'</textarea></div></div>'+
-      '<div class="mfoot"><a class="btn" id="rbDraftOpen" href="'+esc(window.RBDeliveryEmail.mailto(draft))+'">Odpri osnutek v e-pošti</a><button class="btn ghost" id="rbDraftCopy">Kopiraj besedilo</button></div>');
-    el("rbDraftClose").onclick=closeModal;
-    function current(){return {to:el("rbDraftTo").value.trim(),subject:el("rbDraftSubject").value,body:el("rbDraftBody").value};}
-    ["rbDraftTo","rbDraftSubject","rbDraftBody"].forEach(function(id){el(id).oninput=function(){el("rbDraftOpen").href=window.RBDeliveryEmail.mailto(current());};});
-    el("rbDraftCopy").onclick=async function(){try{await navigator.clipboard.writeText(current().body);toast("Besedilo je kopirano. Pred pošiljanjem dodaj pogodbo.");}catch(e){el("rbDraftBody").focus();el("rbDraftBody").select();toast("Besedilo je označeno za kopiranje.");}};
+    window.RBDeliveryEmail.open({sb:sb,order:z,esc:esc,openModal:showModal,closeModal:closeModal,toast:toast});
   }
   async function natisniPogodbo(z){
     // Okno odpremo takoj ob kliku, sicer ga brskalnik blokira kot pojavno okno.
