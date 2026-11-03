@@ -710,7 +710,7 @@
       box.innerHTML = '<div class="boxlist-h">Škatle stranke ('+arr.length+')</div><div class="boxlist">'+vrstice+'</div>'+
         (canReturn?'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button type="button" class="btn ghost small" id="zReturn">Vrni izbrane boxe v zalogo</button>'+
           '<button type="button" class="btn small" id="zReturnRefund"'+(state.isAdmin?'':' disabled title="Vračilo denarja ureja administrator"')+'>Vrni izbrane in vračilo denarja</button></div>'+
-          '<div class="muted" style="font-size:12px;margin-top:6px">Nova mesečna cena začne veljati ob naslednji obnovi.</div>':
+          '<div class="muted" style="font-size:12px;margin-top:6px">Običajno vračilo spremeni ceno ob naslednji obnovi. Vračilo denarja velja samo za neuporabljene odvečne boxe ob prvi dostavi, po razliki med paketoma.</div>':
           '<div class="muted" style="font-size:12px;margin-top:6px">Potrditev je interna. Status boxov spremeniš ob dejanski dostavi ali prevzemu.</div>');
       var returnBtn=el("zReturn");
       if(state.isAdmin)window.RBReturns.bindRefundButton({sb:sb,order:z,button:el("zReturnRefund"),selected:function(){return Array.from(document.querySelectorAll('.z-return-check:checked')).map(function(c){return Number(c.value);});},error:returnError,refresh:refreshAfterReturn});
