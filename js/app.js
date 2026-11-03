@@ -414,7 +414,8 @@
 
   async function openZahteva(z){
     var originalId=z.vir==="narocilo"?z.id:null;
-    if(!originalId&&z.stevilka){var link=await sb.from("narocila").select("id").eq("stevilka",z.stevilka).maybeSingle();originalId=link.data&&link.data.id;}
+    if(!originalId&&z.stevilka){var linked=state.zahteve.find(function(x){return x.vir==="narocilo"&&x.stevilka===z.stevilka;});originalId=linked&&linked.id;}
+    if(closeRequest(z)){var context=await sb.rpc("sklad_predogled_vracila_zahtevka",{p_id:z.id});if(!context.error)originalId=context.data&&context.data.order_id;}
     var detail=originalId?await sb.rpc("rb_billing_order_details",{p_id:originalId}):null;
     var billing=detail&&detail.data;
     var kljuc = z.vir+":"+z.id;
@@ -425,7 +426,7 @@
     var inner =
       '<div class="modal-h"><span>'+(z.vir==="narocilo"?"Naročilo "+esc(z.stevilka||("#"+z.id)):"Zahteva #"+esc(z.id))+'</span><button class="x" id="mx">&times;</button></div>'+
       '<div class="mbody">'+
-      (closeRequest(z)?'<div class="roinfo"><strong>Zahtevek za prevoz in zaključek naročila</strong><br>Po prevzemu izbranih boxov ročno zaključite povezano naročilo. Pred zaključkom preverite tudi morebitne preostale boxe tega naročila.</div>':'')+
+      (closeRequest(z)?'<div class="roinfo"><strong>Zahtevek za prevoz in zaključek naročila</strong><br>Vrni boxe iz tega zahtevka v zalogo. Naročilo se zaključi, ko so vrnjeni vsi njegovi boxi.</div>':'')+
       '<div class="dlist">'+
         drow("Vir",billing?(billing.is_test?"TEST · ":"")+(z.vir==="zahteva"?"Zahteva iz panela":billing.vir==="rocno"?"Ročni vnos":"Spletno naročilo"):virChip(z.vir,z.placano))+
         drow("Način plačila",billing?({stripe_kartica:"Kartica · Stripe",trr:"Nakazilo na TRR",gotovina:"Gotovina"}[billing.nacin_placila]||"Ni zabeleženo"):"Ni zabeleženo")+
@@ -449,6 +450,7 @@
         (["pri_stranki","v_skladiscu","zakljuceno"].indexOf(zKey(z.status))>=0?'<button class="btn ghost" id="z_delivery_mail" type="button" style="margin-top:8px">Osnutek e-pošte s pogodbo</button>':'')+'</div>':'')+
       // seznam za branje pokažemo samo, kadar ni seznama za izbiro boksov
       (jeIzbiraBoksov(z) ? '' : '<div id="zskatle" class="roinfo">Nalagam škatle...</div>')+
+      (z.vir==="narocilo"&&state.isAdmin?'<div id="z_refunds"></div>':'')+
       prevzemBlok(z)+
       (!Z_ZAPRTI[zKey(z.status)]?'<div class="fld" style="margin-top:12px"><label>Nov termin (neobvezno)</label><input type="date" id="z_datum" value="'+esc(String(z.datum_dostave||"").slice(0,10))+'" /></div>':'')+
       '<div id="z_err"></div></div>'+
@@ -466,12 +468,9 @@
     });
     var zbtn = el("z_zakljuci");
     if(zbtn) zbtn.onclick=function(){ zakljuciNarocilo(z); };
-    var linkedBtn = el("z_open_order");
-    if(linkedBtn) linkedBtn.onclick=function(){
-      var linked = state.zahteve.find(function(x){ return x.vir==="narocilo" && Number(x.id)===Number(originalId); });
-      if(linked) openZahteva(linked);
-      else toast("Povezano naročilo poiščite v seznamu naročil.");
-    };
+    var returnRequestBtn = el("z_return_request");
+    if(returnRequestBtn) returnRequestBtn.onclick=function(){window.RBReturns.returnRequest({sb:sb,request:z,button:returnRequestBtn,error:returnError,refresh:refreshAfterReturn});};
+    if(z.vir==="narocilo"&&state.isAdmin)window.RBReturns.loadHistory({sb:sb,order:z,host:el("z_refunds"),error:returnError});
     var pbtn = el("z_pogodba");
     if(pbtn) pbtn.onclick=function(){ natisniPogodbo(z); };
     var mailbtn=el("z_delivery_mail");
@@ -626,7 +625,7 @@
   // Gumb za zaključek: samo pri spletnih naročilih in dokler niso zaključena
   function zakljuciBtn(z){
     if(Z_ZAPRTI[zKey(z.status)]) return '';
-    if(closeRequest(z)) return '<button class="btn zakljuci" id="z_open_order">Odpri naročilo za zaključek</button>';
+    if(closeRequest(z)) return '<button class="btn zakljuci" id="z_return_request">Vrni boxe iz zahtevka</button>';
     if(z.vir!=="narocilo") return '<button class="btn ghost" data-st="zakljuceno">Zaključi zahtevo</button>';
     return '<button class="btn zakljuci" id="z_zakljuci">Zaključi in vrni v zalogo</button>';
   }
@@ -681,6 +680,7 @@
   function zBtn(z, st, label){
     var cur = zKey(z.status);
     if(Z_ZAPRTI[cur]) return '';
+    if(closeRequest(z)&&st!=="caka_dostavo") return '';
     if(cur===st) return '';
     var cls = (st==="preklicano") ? "btn ghost danger" : (st==="zakljuceno" ? "btn ghost" : "btn");
     if(st==="caka_dostavo")label=z.vir==="zahteva"?"Potrdi zahtevo (interno)":"Potrdi naročilo (interno)";
@@ -708,10 +708,12 @@
                '<span class="muted">'+(s.lokacija?esc(s.lokacija):'lokacija ni določena')+'</span></div>';
       }).join("");
       box.innerHTML = '<div class="boxlist-h">Škatle stranke ('+arr.length+')</div><div class="boxlist">'+vrstice+'</div>'+
-        (canReturn?'<button type="button" class="btn ghost small" id="zReturn" style="margin-top:10px">Vrni izbrane boxe v zalogo</button>'+
+        (canReturn?'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button type="button" class="btn ghost small" id="zReturn">Vrni izbrane boxe v zalogo</button>'+
+          '<button type="button" class="btn small" id="zReturnRefund"'+(state.isAdmin?'':' disabled title="Vračilo denarja ureja administrator"')+'>Vrni izbrane in vračilo denarja</button></div>'+
           '<div class="muted" style="font-size:12px;margin-top:6px">Nova mesečna cena začne veljati ob naslednji obnovi.</div>':
           '<div class="muted" style="font-size:12px;margin-top:6px">Potrditev je interna. Status boxov spremeniš ob dejanski dostavi ali prevzemu.</div>');
       var returnBtn=el("zReturn");
+      if(state.isAdmin)window.RBReturns.bindRefundButton({sb:sb,order:z,button:el("zReturnRefund"),selected:function(){return Array.from(document.querySelectorAll('.z-return-check:checked')).map(function(c){return Number(c.value);});},error:returnError,refresh:refreshAfterReturn});
       if(returnBtn) returnBtn.onclick=async function(){
         var ids=Array.prototype.slice.call(document.querySelectorAll(".z-return-check:checked")).map(function(c){return Number(c.value);});
         if(!ids.length){toast("Izberi vsaj en box.");return;}
@@ -731,6 +733,11 @@
     }
   }
 
+  function returnError(message){var box=el("z_err");if(box)box.innerHTML='<div class="alert err">'+esc(message)+'</div>';else toast(message);}
+  async function refreshAfterReturn(message){
+    closeModal();toast(message);state.zahLoaded=false;state.loaded=false;state.boxiZaZahtevo={};
+    renderZahteveTab();await loadZahteve();loadBoxi();
+  }
   async function setZStatus(z, novKey){
     var errBox = el("z_err");
     var btns = document.querySelectorAll(".zactions button");
