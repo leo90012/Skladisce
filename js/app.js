@@ -75,6 +75,7 @@
   function fmtDT(d){ if(!d) return ""; var dt=new Date(d); if(isNaN(dt)) return String(d).slice(0,16); return ("0"+dt.getDate()).slice(-2)+"."+("0"+(dt.getMonth()+1)).slice(-2)+"."+dt.getFullYear()+" "+("0"+dt.getHours()).slice(-2)+":"+("0"+dt.getMinutes()).slice(-2); }
   function statusChip(s){ var k=s||"na_zalogi"; return '<span class="chip '+esc(k)+'">'+esc(STATUSI[k]||k)+'</span>'; }
   function zChip(s){ var k=zKey(s); return '<span class="chip z-'+esc(k)+'">'+esc(Z_STATUSI[k]||k)+'</span>'; }
+  function closeRequest(z){ return z && z.vir==="zahteva" && z.vrsta==="Vračilo in zaključek naročila"; }
   function virChip(v, placano){ return v==="narocilo"
     ? '<span class="chip vir-narocilo">'+(placano===false?"Ročni vnos":"Spletno naročilo")+'</span>'
     : '<span class="chip vir-zahteva">Zahteva iz panela</span>'; }
@@ -288,7 +289,7 @@
         var danes = x.datum_dostave && String(x.datum_dostave).slice(0,10)===todayISO();
         return '<span class="'+(danes?"danes":"")+'">'+d+(x.cas_dostave?' <span class="mono">'+esc(String(x.cas_dostave).slice(0,5))+'</span>':'')+'</span>';
       }},
-      {k:"vir", t:"Vir", r:function(x){ return virChip(x.vir,x.placano); }},
+      {k:"vir", t:"Vir", r:function(x){ return closeRequest(x)?'<span class="chip z-caka_dostavo">Prevoz in zaključek</span>':virChip(x.vir,x.placano); }},
       {k:"stevilka", t:"Naročilo", r:function(x){ return x.stevilka?'<span class="mono">'+esc(x.stevilka)+'</span>':'<span class="dash">–</span>'; }},
       {k:"vrsta", t:"Storitev", r:function(x){ return dash(x.vrsta); }},
       {k:"st_boxov", t:"Boxi", r:function(x){
@@ -423,7 +424,9 @@
     if(z.pomoc_polnjenje) dodatki.push("pomoč pri polnjenju");
     var inner =
       '<div class="modal-h"><span>'+(z.vir==="narocilo"?"Naročilo "+esc(z.stevilka||("#"+z.id)):"Zahteva #"+esc(z.id))+'</span><button class="x" id="mx">&times;</button></div>'+
-      '<div class="mbody"><div class="dlist">'+
+      '<div class="mbody">'+
+      (closeRequest(z)?'<div class="roinfo"><strong>Zahtevek za prevoz in zaključek naročila</strong><br>Po prevzemu izbranih boxov ročno zaključite povezano naročilo. Pred zaključkom preverite tudi morebitne preostale boxe tega naročila.</div>':'')+
+      '<div class="dlist">'+
         drow("Vir",billing?(billing.is_test?"TEST · ":"")+(z.vir==="zahteva"?"Zahteva iz panela":billing.vir==="rocno"?"Ročni vnos":"Spletno naročilo"):virChip(z.vir,z.placano))+
         drow("Način plačila",billing?({stripe_kartica:"Kartica · Stripe",trr:"Nakazilo na TRR",gotovina:"Gotovina"}[billing.nacin_placila]||"Ni zabeleženo"):"Ni zabeleženo")+
         (z.vir==="zahteva"?drow("Povezano naročilo",dash(z.stevilka)):'')+
@@ -463,6 +466,12 @@
     });
     var zbtn = el("z_zakljuci");
     if(zbtn) zbtn.onclick=function(){ zakljuciNarocilo(z); };
+    var linkedBtn = el("z_open_order");
+    if(linkedBtn) linkedBtn.onclick=function(){
+      var linked = state.zahteve.find(function(x){ return x.vir==="narocilo" && Number(x.id)===Number(originalId); });
+      if(linked) openZahteva(linked);
+      else toast("Povezano naročilo poiščite v seznamu naročil.");
+    };
     var pbtn = el("z_pogodba");
     if(pbtn) pbtn.onclick=function(){ natisniPogodbo(z); };
     var mailbtn=el("z_delivery_mail");
@@ -617,6 +626,7 @@
   // Gumb za zaključek: samo pri spletnih naročilih in dokler niso zaključena
   function zakljuciBtn(z){
     if(Z_ZAPRTI[zKey(z.status)]) return '';
+    if(closeRequest(z)) return '<button class="btn zakljuci" id="z_open_order">Odpri naročilo za zaključek</button>';
     if(z.vir!=="narocilo") return '<button class="btn ghost" data-st="zakljuceno">Zaključi zahtevo</button>';
     return '<button class="btn zakljuci" id="z_zakljuci">Zaključi in vrni v zalogo</button>';
   }
