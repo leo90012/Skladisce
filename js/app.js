@@ -466,8 +466,6 @@
     Array.prototype.forEach.call(document.querySelectorAll(".zactions button[data-st]"), function(b){
       b.onclick=function(){ setZStatus(z, b.getAttribute("data-st")); };
     });
-    var zbtn = el("z_zakljuci");
-    if(zbtn) zbtn.onclick=function(){ zakljuciNarocilo(z); };
     var returnRequestBtn = el("z_return_request");
     if(returnRequestBtn) returnRequestBtn.onclick=function(){window.RBReturns.returnRequest({sb:sb,request:z,button:returnRequestBtn,error:returnError,refresh:refreshAfterReturn});};
     if(z.vir==="narocilo"&&state.isAdmin)window.RBReturns.loadHistory({sb:sb,order:z,host:el("z_refunds"),error:returnError});
@@ -622,59 +620,12 @@
     });
   }
 
-  // Gumb za zaključek: samo pri spletnih naročilih in dokler niso zaključena
+  // Zaključni prevoz vrne boxe iz zahtevka; glavno naročilo nima skupinskega gumba za zaključek.
   function zakljuciBtn(z){
     if(Z_ZAPRTI[zKey(z.status)]) return '';
     if(closeRequest(z)) return '<button class="btn zakljuci" id="z_return_request">Vrni boxe iz zahtevka</button>';
     if(z.vir!=="narocilo") return '<button class="btn ghost" data-st="zakljuceno">Zaključi zahtevo</button>';
-    return '<button class="btn zakljuci" id="z_zakljuci">Zaključi in vrni v zalogo</button>';
-  }
-
-  async function zakljuciNarocilo(z){
-    var errBox = el("z_err");
-    var btn = el("z_zakljuci");
-    if(btn){ btn.disabled = true; btn.textContent = "Preverjam..."; }
-    try{
-      // koliko boksov se bo vrnilo
-      var pr = await sb.rpc("sklad_predogled_zakljucka", { p_narocilo_id: z.id });
-      if(pr.error) throw pr.error;
-      var d = (pr.data && pr.data[0]) || { boksov: 0, barkode: "" };
-      var n = Number(d.boksov) || 0;
-
-      var vprasanje = n
-        ? "Zaključim naročilo " + (z.stevilka || ("#"+z.id)) + "?\n\n" +
-          n + " boksov gre nazaj v zalogo in ne bo več vezanih na stranko.\n" +
-          (d.barkode ? "\n" + String(d.barkode).slice(0,300) + (String(d.barkode).length>300?" …":"") : "")
-        : "Zaključim naročilo " + (z.stevilka || ("#"+z.id)) + "?\n\nTemu naročilu ni vezan noben boks.";
-
-      if(!confirm(vprasanje)){
-        if(btn){ btn.disabled=false; btn.textContent="Zaključi in vrni v zalogo"; }
-        return;
-      }
-
-      if(btn) btn.textContent = "Zaključujem...";
-      var r = await sb.rpc("sklad_zakljuci_narocilo", { p_narocilo_id: z.id, p_opomba: null });
-      if(r.error) throw r.error;
-      var res = (r.data && r.data[0]) || {};
-      try {
-        var mail = await sb.functions.invoke("poslji-obvestilo", { body: { tip:"zakljucek", narocilo_id:z.id } });
-        if(mail.error || (mail.data && mail.data.error)) console.warn("Zahvala stranki ni bila poslana:", mail.error || mail.data.error);
-      } catch(mailError) { console.warn("Zahvala stranki ni bila poslana:", mailError); }
-
-      stopScanner();
-      closeModal();
-      toast(Number(res.vrnjenih_boksov) > 0
-        ? "Naročilo zaključeno · " + res.vrnjenih_boksov + " boksov vrnjenih v zalogo"
-        : "Naročilo zaključeno");
-
-      state.zahLoaded=false; state.loaded=false; state.boxiZaZahtevo={};
-      renderZahteveTab();
-      await loadZahteve();
-      loadBoxi();
-    }catch(e){
-      if(errBox) errBox.innerHTML = '<div class="alert err">Napaka: '+esc(e.message||e)+'</div>';
-      if(btn){ btn.disabled=false; btn.textContent="Zaključi in vrni v zalogo"; }
-    }
+    return '';
   }
 
   function zBtn(z, st, label){
