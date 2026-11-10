@@ -430,7 +430,7 @@
     var requests=relatedTransport(order);
     return '<section class="roinfo" id="z_transport"><strong>Zahtevki za prevoz ('+requests.length+')</strong>'+
       (requests.length?requests.map(function(z){return '<button type="button" class="btn ghost" data-transport="'+esc(z.id)+'" style="display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;margin-top:10px;text-align:left;flex-wrap:wrap">'+
-        '<span>'+esc(z.vrsta||"Prevoz")+' #'+esc(z.id)+'<br><span class="muted" style="font-size:12px">'+esc(z.datum_dostave?fmtD(z.datum_dostave):"Brez termina")+(z.cas_dostave?' ob '+esc(String(z.cas_dostave).slice(0,5)):'')+' · '+esc(z.st_boxov||0)+' boxov</span></span>'+zChip(z.status)+'</button>';}).join(""):
+        '<span>'+esc(z.vrsta||"Prevoz")+' #'+esc(z.id)+'<br><span class="muted" style="font-size:12px">'+esc(z.datum_dostave?fmtD(z.datum_dostave):"Brez termina")+(z.cas_dostave?' ob '+esc(String(z.cas_dostave).slice(0,5)):'')+' · Boxi: '+esc(z.st_boxov||0)+'</span></span>'+zChip(z.status)+'</button>';}).join(""):
         '<div class="muted" style="margin-top:8px">Za to naročilo še ni zahtevkov za prevoz.</div>')+'</section>';
   }
   async function openZahteva(z){
