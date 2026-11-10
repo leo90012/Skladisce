@@ -65,7 +65,7 @@
     boxes:[], dogodki:[], zahteve:[], loaded:false, dogLoaded:false, zahLoaded:false,
     q:"", fStatus:"", fNar:"", sortKey:"id", sortDir:1,
     dq:"", dSortKey:"cas", dSortDir:-1,
-    zq:"", zStatus:"", zVir:"", zOpenOnly:true, zSortKey:"", zSortDir:1,
+    zq:"", zStatus:"", zOpenOnly:true, zSortKey:"", zSortDir:1,
     boxiZaZahtevo:{}
   };
 
@@ -175,7 +175,7 @@
 
   /* ---------------- MAIN ---------------- */
   function odprtihZahtev(){
-    return state.zahteve.filter(orderOpen).length;
+    return state.zahteve.filter(orderActive).length;
   }
   function renderMain(){
     var odp = odprtihZahtev();
@@ -211,21 +211,18 @@
   function renderZahteveTab(){
     var c = el("content"); if(!c) return;
     if(!state.zahLoaded){ c.innerHTML = '<div class="boot"><div class="spinner"></div></div>'; return; }
-    var stOpts = Object.keys(Z_STATUSI).map(function(k){ return '<option value="'+k+'">'+esc(Z_STATUSI[k])+'</option>'; }).join("");
     c.innerHTML =
       '<div class="stats" id="zstats"></div>'+
       '<div style="margin:0 0 14px"><button class="btn" id="zManual" type="button">Ročni vnos / nov profil</button></div>'+
       '<div class="toolbar">'+
       '<input class="search" id="zq" placeholder="Iskanje: stranka, naslov, št. stranke, telefon..." value="'+esc(state.zq)+'" />'+
-      '<select id="zStatus"><option value="">Vsi statusi</option><optgroup label="Naročila"><option value="aktivno">Aktivno</option><option value="neaktivno">Neaktivno</option></optgroup><optgroup label="Zahtevki za prevoz">'+stOpts+'</optgroup></select>'+
-      '<select id="zVir"><option value="">Vsi viri</option><option value="narocilo">Spletna naročila</option><option value="zahteva">Zahteve iz panela</option></select>'+
+      '<select id="zStatus"><option value="">Vsi statusi</option><option value="aktivno">Aktivno</option><option value="neaktivno">Neaktivno</option></select>'+
       '<label class="chk"><input type="checkbox" id="zOpen" '+(state.zOpenOnly?"checked":"")+' /> Samo odprta</label>'+
       '<span class="count" id="zcount"></span>'+
       '</div>'+
       '<div class="tablecard" id="ztablecard"></div>';
     el("zq").addEventListener("input", function(e){ state.zq=e.target.value; refreshZahteve(); });
     el("zStatus").value=state.zStatus; el("zStatus").addEventListener("change", function(e){ state.zStatus=e.target.value;if(state.zStatus==='neaktivno'){state.zOpenOnly=false;el('zOpen').checked=false;}refreshZahteve(); });
-    el("zVir").value=state.zVir; el("zVir").addEventListener("change", function(e){ state.zVir=e.target.value; refreshZahteve(); });
     el("zOpen").addEventListener("change", function(e){ state.zOpenOnly=e.target.checked;if(state.zOpenOnly&&state.zStatus==='neaktivno'){state.zStatus='';el('zStatus').value='';}refreshZahteve(); });
     el("zManual").addEventListener("click", openManualForm);
     refreshZahteve();
@@ -321,11 +318,10 @@
   function filteredZahteve(){
     var q = state.zq.trim().toLowerCase();
     return state.zahteve.filter(function(x){
+      if(x.vir!=="narocilo") return false;
       if(state.zOpenOnly && !orderOpen(x)) return false;
       if(state.zStatus==='aktivno' && !orderActive(x)) return false;
       if(state.zStatus==='neaktivno' && (x.vir!=='narocilo'||orderActive(x))) return false;
-      if(state.zStatus && state.zStatus!=='aktivno' && state.zStatus!=='neaktivno' && (x.vir!=='zahteva'||zKey(x.status)!==state.zStatus)) return false;
-      if(state.zVir && x.vir!==state.zVir) return false;
       if(q){
         var hay=[x.kupec,x.kupec_email,x.telefon,x.stevilka_stranke,x.naslov,x.mesto,x.postna_stevilka,x.vrsta,x.stevilka,x.opomba].join(" ").toLowerCase();
         if(hay.indexOf(q)<0) return false;
@@ -342,10 +338,11 @@
       var ar = state.zSortKey===c.k ? '<span class="ar">'+(state.zSortDir>0?"▲":"▼")+'</span>' : '';
       return '<th data-k="'+c.k+'">'+esc(c.t)+ar+'</th>';
     }).join("")+'</tr>';
-    var prazno = state.zahteve.length
+    var vsehNarocil = state.zahteve.filter(function(z){return z.vir==="narocilo";}).length;
+    var prazno = vsehNarocil
       ? '<div class="empty"><img src="Slike/Skatle.png" alt="" /><div>Ni naročil, ki bi ustrezala filtru.</div></div>'
       : '<div class="empty"><img src="Slike/Skatle.png" alt="" /><div>Trenutno ni nobenega naročila.</div>'+
-        '<div class="muted" style="font-size:12.5px;margin-top:6px">Nova naročila s spletne strani in zahteve iz panela se prikažejo samodejno.</div></div>';
+        '<div class="muted" style="font-size:12.5px;margin-top:6px">Nova naročila se prikažejo samodejno. Zahtevki za prevoz so v podrobnostih naročila.</div></div>';
     var body = rows.length
       ? rows.map(function(x){
           var nova = zKey(x.status)==="nova" ? " nova-vrstica" : "";
@@ -353,7 +350,7 @@
         }).join("")
       : '<tr><td class="empty-cell" colspan="'+cols.length+'">'+prazno+'</td></tr>';
     el("ztablecard").innerHTML = '<div class="tablescroll"><table><thead>'+head+'</thead><tbody>'+body+'</tbody></table></div>';
-    var cnt = el("zcount"); if(cnt) cnt.textContent = rows.length+" / "+state.zahteve.length+" naročil";
+    var cnt = el("zcount"); if(cnt) cnt.textContent = rows.length+" / "+vsehNarocil+" naročil";
     Array.prototype.forEach.call(document.querySelectorAll("#ztablecard th"), function(th){
       th.addEventListener("click", function(){ var k=th.getAttribute("data-k"); if(state.zSortKey===k) state.zSortDir*=-1; else{ state.zSortKey=k; state.zSortDir=1; } refreshZahteve(); });
     });
@@ -386,7 +383,7 @@
 
   // Za vsako naročilo naloži pripadajoče škatle (da so številke vidne v seznamu)
   async function loadBoxiZaZahteve(){
-    var seznam = state.zahteve.slice(0, 60);
+    var seznam = state.zahteve.filter(function(z){return z.vir==="narocilo";}).slice(0, 60);
     for(var i=0;i<seznam.length;i++){
       var z = seznam[i], kljuc = z.vir+":"+z.id;
       if(state.boxiZaZahtevo[kljuc] !== undefined) continue;
@@ -423,10 +420,24 @@
     }
   }
 
+  function relatedTransport(order){
+    return state.zahteve.filter(function(z){
+      if(z.vir!=="zahteva") return false;
+      return z.narocilo_id!=null ? Number(z.narocilo_id)===Number(order.id) : !!order.stevilka && z.stevilka===order.stevilka;
+    }).sort(function(a,b){return String(b.ustvarjeno||"").localeCompare(String(a.ustvarjeno||""));});
+  }
+  function transportList(order){
+    var requests=relatedTransport(order);
+    return '<section class="roinfo" id="z_transport"><strong>Zahtevki za prevoz ('+requests.length+')</strong>'+
+      (requests.length?requests.map(function(z){return '<button type="button" class="btn ghost" data-transport="'+esc(z.id)+'" style="display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;margin-top:10px;text-align:left;flex-wrap:wrap">'+
+        '<span>'+esc(z.vrsta||"Prevoz")+' #'+esc(z.id)+'<br><span class="muted" style="font-size:12px">'+esc(z.datum_dostave?fmtD(z.datum_dostave):"Brez termina")+(z.cas_dostave?' ob '+esc(String(z.cas_dostave).slice(0,5)):'')+' · '+esc(z.st_boxov||0)+' boxov</span></span>'+zChip(z.status)+'</button>';}).join(""):
+        '<div class="muted" style="margin-top:8px">Za to naročilo še ni zahtevkov za prevoz.</div>')+'</section>';
+  }
   async function openZahteva(z){
-    var originalId=z.vir==="narocilo"?z.id:null;
+    var originalId=z.vir==="narocilo"?z.id:z.narocilo_id||null;
     if(!originalId&&z.stevilka){var linked=state.zahteve.find(function(x){return x.vir==="narocilo"&&x.stevilka===z.stevilka;});originalId=linked&&linked.id;}
     if(closeRequest(z)){var context=await sb.rpc("sklad_predogled_vracila_zahtevka",{p_id:z.id});if(!context.error)originalId=context.data&&context.data.order_id;}
+    var parentOrder=z.vir==="zahteva"?state.zahteve.find(function(x){return x.vir==="narocilo"&&Number(x.id)===Number(originalId);}):null;
     var detail=originalId?await sb.rpc("rb_billing_order_details",{p_id:originalId}):null;
     var billing=detail&&detail.data;
     var kljuc = z.vir+":"+z.id;
@@ -457,6 +468,7 @@
         drow("Opomba", dash(z.opomba))+
         drow("Status", orderStatusChip(z))+
       '</div>'+
+      (z.vir==="narocilo"?transportList(z):'')+
       (z.vir==="narocilo"?'<div style="margin:12px 0 0"><button class="btn ghost" id="z_pogodba" type="button">Natisni pogodbo</button>'+
         (["pri_stranki","v_skladiscu","zakljuceno"].indexOf(zKey(z.status))>=0?'<button class="btn ghost" id="z_delivery_mail" type="button" style="margin-top:8px">Osnutek e-pošte s pogodbo</button>':'')+
         '<button class="btn ghost" id="z_credit_mail" type="button" style="margin-top:8px">Osnutek e-pošte z dobropisom</button></div>':'')+
@@ -467,6 +479,7 @@
       (!Z_ZAPRTI[zKey(z.status)]?'<div class="fld" style="margin-top:12px"><label>Nov termin (neobvezno)</label><input type="date" id="z_datum" value="'+esc(String(z.datum_dostave||"").slice(0,10))+'" /></div>':'')+
       '<div id="z_err"></div></div>'+
       '<div class="mfoot">'+
+        (parentOrder?'<button type="button" class="btn ghost" id="z_parent">Nazaj na naročilo</button>':'')+
         '<div class="zactions">'+
           Z_KORAKI.map(function(k){ return zBtn(z,k,Z_GUMBI[k]); }).join("")+
           zakljuciBtn(z)+
@@ -475,6 +488,10 @@
       '</div>';
     showModal(inner);
     el("mx").onclick=closeModal;
+    var parentBtn=el("z_parent");if(parentBtn)parentBtn.onclick=function(){openZahteva(parentOrder);};
+    Array.prototype.forEach.call(document.querySelectorAll("#z_transport [data-transport]"),function(b){
+      b.onclick=function(){var request=relatedTransport(z).find(function(x){return String(x.id)===b.getAttribute("data-transport");});if(request)openZahteva(request);};
+    });
     Array.prototype.forEach.call(document.querySelectorAll(".zactions button[data-st]"), function(b){
       b.onclick=function(){ setZStatus(z, b.getAttribute("data-st")); };
     });
