@@ -345,7 +345,9 @@
         '<div class="muted" style="font-size:12.5px;margin-top:6px">Nova naročila se prikažejo samodejno. Zahtevki za prevoz so v podrobnostih naročila.</div></div>';
     var body = rows.length
       ? rows.map(function(x){
-          var nova = zKey(x.status)==="nova" ? " nova-vrstica" : "";
+          var novoNarocilo = zKey(x.status)==="nova";
+          var novZahtevek = !Z_ZAPRTI[zKey(x.status)] && relatedTransport(x).some(function(z){return zKey(z.status)==="nova";});
+          var nova = novoNarocilo || novZahtevek ? " nova-vrstica" : "";
           return '<tr class="rowlink'+nova+'" data-key="'+esc(x.vir+":"+x.id)+'">'+cols.map(function(c){ return '<td data-l="'+esc(c.t)+'">'+c.r(x)+'</td>'; }).join("")+'</tr>';
         }).join("")
       : '<tr><td class="empty-cell" colspan="'+cols.length+'">'+prazno+'</td></tr>';
