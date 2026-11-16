@@ -212,7 +212,6 @@
     var c = el("content"); if(!c) return;
     if(!state.zahLoaded){ c.innerHTML = '<div class="boot"><div class="spinner"></div></div>'; return; }
     c.innerHTML =
-      '<div class="stats" id="zstats"></div>'+
       '<div style="margin:0 0 14px"><button class="btn" id="zManual" type="button">Ročni vnos / nov profil</button></div>'+
       '<div class="toolbar">'+
       '<input class="search" id="zq" placeholder="Iskanje: stranka, naslov, št. stranke, telefon..." value="'+esc(state.zq)+'" />'+
@@ -229,8 +228,6 @@
   }
 
   function openManualForm(){
-    var times=[];
-    for(var h=9;h<=16;h++) times.push('<option value="'+("0"+h).slice(-2)+':00">'+("0"+h).slice(-2)+':00</option>');
     showModal('<div class="modal-h"><span>Ročni vnos / nov profil</span><button class="x" id="mx">&times;</button></div>'+
       '<form id="manualForm" class="mbody">'+
         '<div class="fgrid">'+
@@ -246,8 +243,9 @@
         '<div id="mOrder" class="fgrid">'+
           fld("Storitev",'<select id="mTip"><option value="skladiscenje">Skladiščenje</option><option value="izposoja">Izposoja</option></select>')+
           fld("Število boxov",'<input id="mBoxi" type="number" min="1" max="5000" value="10" />')+
-          fld("Datum dostave",'<input id="mDatum" type="date" />')+
-          fld("Ura",'<select id="mCas">'+times.join("")+'</select>')+
+          '<div class="fld"><label for="mDatum">Datum dostave</label><input id="mDatum" type="date" aria-describedby="mTerminHint" disabled /></div>'+
+          '<div class="fld"><label for="mCas">Ura</label><select id="mCas" aria-describedby="mTerminHint" disabled><option value="">Najprej izberite datum</option></select></div>'+
+          '<small class="muted" id="mTerminHint" role="status" style="grid-column:1 / -1">Nalagam pravila dostave …</small>'+
           fld("Opomba",'<textarea id="mOpomba" rows="2"></textarea>')+
         '</div>'+
         '<p class="muted" style="font-size:12px;margin-top:12px">Stranka prejme e-pošto s povezavo za nastavitev gesla v Mojem profilu. Ročno naročilo ne sproži Stripe plačila ali predračuna.</p>'+
@@ -256,10 +254,81 @@
       '</form>');
     el("mx").onclick=closeModal;
     el("mCancel").onclick=closeModal;
-    el("mOnly").onchange=function(){ el("mOrder").style.display=this.checked?"none":"grid"; };
-    el("manualForm").onsubmit=async function(e){
+    var form=el("manualForm"),onlyProfile=el("mOnly"),orderFields=el("mOrder");
+    var dateInput=el("mDatum"),timeSelect=el("mCas"),hint=el("mTerminHint");
+    var rules,picker,slotRequest=0;
+    var dateHint="Dostave so od ponedeljka do petka, najmanj 3 delovne dni vnaprej.";
+
+    function toggleOrderFields(){
+      orderFields.style.display=onlyProfile.checked?"none":"grid";
+      dateInput.disabled=onlyProfile.checked||!rules;
+      if(picker){
+        picker.altInput.disabled=dateInput.disabled;
+        if(onlyProfile.checked) picker.close();
+      }
+    }
+    async function refreshTimes(){
+      var request=++slotRequest,date=dateInput.value;
+      timeSelect.disabled=true;
+      timeSelect.innerHTML='<option value="">Najprej izberite datum</option>';
+      hint.textContent=dateHint;
+      if(!date||!rules) return;
+      var weekday=new Date(date+"T12:00:00Z").getUTCDay();
+      if(date<rules.minDate||date>rules.maxDate||weekday===0||weekday===6){
+        hint.textContent="Izberite delovni dan najmanj 3 delovne dni in največ 365 dni vnaprej.";
+        return;
+      }
+      hint.textContent="Preverjam razpoložljivost …";
+      try{
+        var result=await sb.rpc("zasedeni_termini",{d:date});
+        if(!form.isConnected||request!==slotRequest) return;
+        if(result.error) throw result.error;
+        var occupied=new Set((result.data||[]).map(function(time){return String(time).slice(0,2);}));
+        function isBooked(time){return occupied.has(time.slice(0,2));}
+        timeSelect.innerHTML='<option value="">Izberite uro</option>';
+        rules.times.forEach(function(time){
+          var booked=isBooked(time);
+          var option=new Option(time+(booked?" (zasedeno)":""),time);
+          option.disabled=booked;
+          timeSelect.add(option);
+        });
+        timeSelect.disabled=rules.times.every(isBooked);
+        hint.textContent=timeSelect.disabled?"Na ta dan ni prostih terminov. Izberite drug datum.":"Zasedeni termini so onemogočeni. Dostava traja eno uro.";
+      }catch(ex){
+        if(form.isConnected&&request===slotRequest) hint.textContent="Razpoložljivosti ni bilo mogoče preveriti. Ponovno izberite datum.";
+      }
+    }
+    async function loadDeliveryRules(){
+      try{
+        var result=await sb.functions.invoke("sklad-rocni-vnos",{body:{action:"delivery_rules"}});
+        if(!form.isConnected) return;
+        if(result.error||!Array.isArray(result.data?.times)) throw result.error||new Error();
+        rules=result.data;
+        dateInput.min=rules.minDate;
+        dateInput.max=rules.maxDate;
+        toggleOrderFields();
+        if(window.flatpickr){
+          picker=window.flatpickr(dateInput,{
+            minDate:rules.minDate,maxDate:rules.maxDate,dateFormat:"Y-m-d",altInput:true,altFormat:"d. m. Y",disableMobile:true,
+            locale:window.flatpickr.l10ns.sl,
+            disable:[function(date){return date.getDay()===0||date.getDay()===6;}],
+            onChange:refreshTimes
+          });
+          picker.altInput.id="mDatumPrikaz";
+          picker.altInput.setAttribute("aria-describedby","mTerminHint");
+          orderFields.querySelector('label[for="mDatum"]').htmlFor=picker.altInput.id;
+          toggleOrderFields();
+        }else dateInput.onchange=refreshTimes;
+        hint.textContent=dateHint;
+      }catch(ex){
+        if(form.isConnected) hint.textContent="Pravil dostave ni bilo mogoče naložiti. Zaprite obrazec in ga odprite znova.";
+      }
+    }
+    onlyProfile.onchange=toggleOrderFields;
+    loadDeliveryRules();
+    form.onsubmit=async function(e){
       e.preventDefault();
-      var only=el("mOnly").checked;
+      var only=onlyProfile.checked;
       var body={ime:el("mIme").value.trim(),priimek:el("mPriimek").value.trim(),
         email:el("mEmail").value.trim(),telefon:el("mTelefon").value.trim(),
         naslov:el("mNaslov").value.trim(),postna_stevilka:el("mPosta").value.trim(),
@@ -268,16 +337,29 @@
         datum_dostave:el("mDatum").value,cas_dostave:el("mCas").value,
         opomba:el("mOpomba").value.trim()};
       var btn=el("mSave"),err=el("mError");
+      if(!only&&(timeSelect.disabled||!timeSelect.value||timeSelect.selectedOptions[0]?.disabled)){
+        err.innerHTML='<div class="alert err">Izberite prost datum in uro dostave.</div>';
+        (dateInput.value&&!timeSelect.disabled?timeSelect:(picker?.altInput||dateInput)).focus();
+        return;
+      }
       btn.disabled=true;btn.textContent="Shranjujem...";err.innerHTML="";
       try{
         var res=await sb.functions.invoke("sklad-rocni-vnos",{body:body});
-        if(res.error||!res.data||res.data.error) throw new Error((res.data&&res.data.error)||(res.error&&res.error.message)||"Ročni vnos ni uspel.");
+        if(res.error||!res.data||res.data.error){
+          var detail=res.data?.error;
+          if(!detail&&typeof res.error?.context?.json==="function"){
+            var response=await res.error.context.json().catch(function(){return null;});
+            detail=response?.error;
+          }
+          throw new Error(detail||"Ročni vnos ni uspel. Poskusite znova.");
+        }
         closeModal();
         var kaj=only?"Profil ustvarjen":"Naročilo "+res.data.stevilka+" ustvarjeno";
         if(res.data.povabilo) toast(kaj+"; stranka je prejela e-pošto.");
         else alert(kaj+", vendar e-pošta stranki NI bila poslana."+(res.data.email_napaka?"\n\n"+res.data.email_napaka:""));
         if(!only){state.zahLoaded=false;renderZahteveTab();await loadZahteve();loadBoxi();}
       }catch(ex){err.innerHTML='<div class="alert err">'+esc(ex.message||ex)+'</div>';
+        if(ex.message==="Izbrani termin je zaseden."&&form.isConnected) refreshTimes();
         btn.disabled=false;btn.textContent="Shrani";}
     };
   }
@@ -363,24 +445,6 @@
         if(z) openZahteva(z);
       });
     });
-    renderZStats();
-  }
-
-  function renderZStats(){
-    var box = el("zstats"); if(!box) return;
-    var danes = todayISO();
-    var c = {danes:0, aktivno:0, neaktivno:0, prevozi:0};
-    state.zahteve.forEach(function(z){
-      var k=zKey(z.status);
-      if(z.vir==='narocilo')c[orderActive(z)?'aktivno':'neaktivno']++;
-      else if(!Z_ZAPRTI[k])c.prevozi++;
-      if(orderOpen(z) && z.datum_dostave && String(z.datum_dostave).slice(0,10)===danes) c.danes++;
-    });
-    box.innerHTML =
-      '<div class="stat"><div class="n"><span class="dot" style="background:var(--green)"></span>'+c.aktivno+'</div><div class="l">Aktivna naročila</div></div>'+
-      '<div class="stat"><div class="n">'+c.neaktivno+'</div><div class="l">Neaktivna naročila</div></div>'+
-      '<div class="stat"><div class="n"><span class="dot" style="background:var(--brand)"></span>'+c.danes+'</div><div class="l">Za danes</div></div>'+
-      '<div class="stat"><div class="n"><span class="dot" style="background:var(--amber)"></span>'+c.prevozi+'</div><div class="l">Odprti prevozi</div></div>';
   }
 
   // Za vsako naročilo naloži pripadajoče škatle (da so številke vidne v seznamu)
@@ -957,7 +1021,13 @@
     document.body.appendChild(ov);
     ov.addEventListener("click", function(e){ if(e.target===ov) closeModal(); });
   }
-  function closeModal(){ stopScanner(); var ov=el("overlay"); if(ov&&ov.parentNode) ov.parentNode.removeChild(ov); }
+  function closeModal(){
+    stopScanner();
+    var ov=el("overlay");
+    if(!ov) return;
+    ov.querySelector("#mDatum")?._flatpickr?.destroy();
+    ov.remove();
+  }
   function fld(label,input){ return '<div class="fld"><label>'+esc(label)+'</label>'+input+'</div>'; }
   function drow(k,v){ return '<div class="drow"><span class="dk">'+esc(k)+'</span><span class="dv">'+v+'</span></div>'; }
 
