@@ -522,6 +522,7 @@
         drow("Storitev (produkt)", z.vir==="narocilo"&&billing?(billing.tip==="izposoja"?"Izposoja ":"Skladiščenje ")+billing.st_boxov+" boxov":dash(z.vrsta))+
         drow("Št. boxov", z.vir==="narocilo"&&billing?String(billing.st_boxov):z.st_boxov?String(z.st_boxov):'<span class="dash">–</span>')+
         drow("Cena",billing?eur(billing.cena)+" / 30 dni":"Ni zabeleženo")+
+        (z.vir==="narocilo"?drow("Cena naslednjega obdobja",billing?.naslednja_cena!=null?eur(billing.naslednja_cena)+" / 30 dni":"–"):"")+
         drow("Datum naročila",fmtDT(billing?billing.datum_narocila:z.ustvarjeno))+
         drow("Trajanje",billing&&billing.datum_od?fmtD(billing.datum_od)+" – "+fmtD(new Date(Date.parse(billing.datum_do+"T12:00:00Z")-86400000).toISOString()):"Ni zabeleženo")+
         drow("Stranka", dash(z.kupec)+(z.stevilka_stranke?' <span class="mono">('+esc(z.stevilka_stranke)+')</span>':''))+
